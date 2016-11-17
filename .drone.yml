@@ -1,4 +1,6 @@
-image: rancher/dind:v1.10.0-rancher1
-script:
- - wrapdocker
- - make ci
+---
+pipeline:
+  build:
+    image: rancher/dapper:1.11.2
+    commands:
+    - dapper ci
