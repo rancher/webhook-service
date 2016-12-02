@@ -1,11 +1,10 @@
-package drivers
+package service
 
 import (
 	"crypto/rsa"
 	"fmt"
 	"github.com/rancher/rancher-auth-service/util"
 	"github.com/urfave/cli"
-	"os"
 )
 
 //PrivateKey to be used for jwt creation
@@ -13,10 +12,6 @@ var PrivateKey *rsa.PrivateKey
 
 //PublicKey to be used for jwt decode
 var PublicKey *rsa.PublicKey
-
-var CattleURL string
-var accessKey string
-var secretKey string
 
 func SetEnv(c *cli.Context) error {
 	privateKeyFile := c.GlobalString("rsa-private-key-file")
@@ -46,10 +41,6 @@ func SetEnv(c *cli.Context) error {
 	} else {
 		return fmt.Errorf("Please provide either rsa-public-key-file or rsa-public-key-contents, halting")
 	}
-
-	CattleURL = os.Getenv("CATTLE_URL")
-	accessKey = os.Getenv("CATTLE_ACCESS_KEY")
-	secretKey = os.Getenv("CATTLE_SECRET_KEY")
 
 	return nil
 }
