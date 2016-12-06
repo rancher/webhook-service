@@ -51,12 +51,12 @@ func main() {
 }
 
 func StartWebhook(c *cli.Context) {
+	drivers.RegisterDrivers()
 	router := service.NewRouter()
-	err := drivers.SetEnv(c)
+	err := service.SetEnv(c)
 	if err != nil {
 		log.Fatal("rsa-private-key-file or rsa-public-key-file not provided, halting")
 	}
-	drivers.RegisterDrivers()
 	log.Infof("Webhook service listening on 8085")
 	log.Fatal(http.ListenAndServe(":8085", router))
 }
