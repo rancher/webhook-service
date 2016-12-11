@@ -1,18 +1,12 @@
 #!/bin/bash
 set -e
 
-source $(dirname $0)/version
+cd $(dirname $0)/..
 
-ARCH=${ARCH:?"ARCH not set"}
-SUFFIX=""
-[ "${ARCH}" != "amd64" ] && SUFFIX="_${ARCH}"
+if [ ! -e bin/webhook-service ]; then
+    ./scripts/build
+fi
 
-cd $(dirname $0)/../package
-
-TAG=${TAG:-${VERSION}${SUFFIX}}
-REPO=${REPO:-rancher}
-
-cp ../bin/webhook-service .
-docker build -t ${REPO}/webhook-service:${TAG} .
-
-echo Built ${REPO}/webhook-service:${TAG}
+mkdir -p dist/artifacts
+cd bin/
+tar cvJf ../dist/artifacts/webhook-service.tar.xz .
