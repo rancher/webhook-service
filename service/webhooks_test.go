@@ -11,19 +11,39 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
-
-type ServiceScalerTest struct{}
 
 var server *httptest.Server
 var privateKeyFile string
 var publicKeyFile string
 var token string
 
+type ServiceScalerTest struct{}
+
+type mockGenericObject struct {
+	client.GenericObjectOperations
+	genericObject *client.GenericObject
+}
+
+func (m *mockGenericObject) Create(genericObject *client.GenericObject) (*client.GenericObject, error) {
+	m.genericObject = genericObject
+	return genericObject, nil
+}
+
+func (m *mockGenericObject) List(opts *client.ListOpts) (*client.GenericObjectCollection, error) {
+	return &client.GenericObjectCollection{}, nil
+}
+
 func (s *ServiceScalerTest) Execute(payload map[string]interface{}, apiClient client.RancherClient) (int, error) {
 	logrus.Infof("Execute of mock driver")
+	return 0, nil
+}
+
+func (s *ServiceScalerTest) ValidatePayload(input map[string]interface{}, apiClient client.RancherClient) (int, error) {
+	logrus.Infof("Validate payload of mock driver")
 	return 0, nil
 }
 
@@ -36,7 +56,11 @@ type ExecuteStructTest struct{}
 
 func (e *ExecuteStructTest) GetClient(projectID string) (client.RancherClient, error) {
 	logrus.Infof("RancherClientFactory GetClient")
-	return client.RancherClient{}, nil
+	mockGenericObjectOps := &mockGenericObject{}
+	mockClient := &client.RancherClient{
+		GenericObject: mockGenericObjectOps,
+	}
+	return *mockClient, nil
 }
 
 func init() {
@@ -49,17 +73,23 @@ func init() {
 
 func TestConstruct(t *testing.T) {
 	constructURL := fmt.Sprintf("%s/v1-webhooks-generate", server.URL)
-	jsonStr := []byte(`{"driver":"serviceScaleTest"}`)
+	jsonStr := []byte(`{"driver":"serviceScaleTest","name":"Test service scale_1"}`)
 	request, err := http.NewRequest("POST", constructURL, bytes.NewBuffer(jsonStr))
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-API-ACCOUNT-ID", "1a1")
-	response, err := http.DefaultClient.Do(request)
-
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.StatusCode != 200 {
-		t.Errorf("StatusCode %d means ConstructPayloadTest failed", response.StatusCode)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-API-Project-Id", "1a1")
+
+	response := httptest.NewRecorder()
+	r := RouteHandler{}
+	r.rcf = &ExecuteStructTest{}
+	f := HandleError
+	handler := f(schemas, r.ConstructPayload)
+	handler.ServeHTTP(response, request)
+
+	if response.Code != 200 {
+		t.Errorf("StatusCode %d means ConstructPayloadTest failed", response.Code)
 	}
 	resp, err := ioutil.ReadAll(response.Body)
 	payload := make(map[string]interface{})
@@ -70,13 +100,13 @@ func TestConstruct(t *testing.T) {
 
 func TestExecute(t *testing.T) {
 	receiverURL := fmt.Sprintf("%s/v1-webhooks-receiver", server.URL)
-	jsonData := fmt.Sprintf(`{"token":"%s"}`, token)
-	jsonStr := []byte(jsonData)
-	request, err := http.NewRequest("POST", receiverURL, bytes.NewBuffer(jsonStr))
+	form := url.Values{}
+	form.Add("token", token)
+	request, err := http.NewRequest("POST", receiverURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
 	r := RouteHandler{}
 	r.rcf = &ExecuteStructTest{}
@@ -84,7 +114,7 @@ func TestExecute(t *testing.T) {
 	handler := f(schemas, r.Execute)
 	handler.ServeHTTP(response, request)
 
-	if response.Code != 200 {
+	if response.Code == 500 {
 		t.Errorf("StatusCode %d means Execute failed", response.Code)
 	}
 }

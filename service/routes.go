@@ -18,6 +18,7 @@ func HandleError(s *client.Schemas, t func(http.ResponseWriter, *http.Request) (
 		if code, err := t(rw, req); err != nil {
 			apiContext := api.GetApiContext(req)
 			logrus.Errorf("Error in request: %v", err)
+			rw.WriteHeader(code)
 			writeErr := apiContext.WriteResource(&ServerAPIError{
 				Resource: client.Resource{
 					Type: "error",
