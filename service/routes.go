@@ -1,26 +1,27 @@
 package service
 
 import (
+	"crypto/rsa"
+	"net/http"
+
 	"github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
 	"github.com/rancher/go-rancher/api"
-	"github.com/rancher/go-rancher/client"
-	//This should be v2, supporting schemas
+	v1client "github.com/rancher/go-rancher/client"
 	"github.com/rancher/webhook-service/drivers"
-	"net/http"
+	"github.com/rancher/webhook-service/model"
 )
 
-var schemas *client.Schemas
-var router *mux.Router
+var schemas *v1client.Schemas
 
-func HandleError(s *client.Schemas, t func(http.ResponseWriter, *http.Request) (int, error)) http.Handler {
+func HandleError(s *v1client.Schemas, t func(http.ResponseWriter, *http.Request) (int, error)) http.Handler {
 	return api.ApiHandler(s, http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		if code, err := t(rw, req); err != nil {
 			apiContext := api.GetApiContext(req)
 			logrus.Errorf("Error in request: %v", err)
 			rw.WriteHeader(code)
-			writeErr := apiContext.WriteResource(&ServerAPIError{
-				Resource: client.Resource{
+			writeErr := apiContext.WriteResource(&model.ServerAPIError{
+				Resource: v1client.Resource{
 					Type: "error",
 				},
 				Code:    code,
@@ -35,58 +36,35 @@ func HandleError(s *client.Schemas, t func(http.ResponseWriter, *http.Request) (
 }
 
 type RouteHandler struct {
-	rcf RancherClientFactory
+	ClientFactory RancherClientFactory
+	PrivateKey    *rsa.PrivateKey
+	PublicKey     *rsa.PublicKey
 }
 
-func NewRouter() *mux.Router {
+func NewRouter(r *RouteHandler) *mux.Router {
 	schemas = driverSchemas()
-	router = mux.NewRouter().StrictSlash(true)
+	router := mux.NewRouter().StrictSlash(true)
 	f := HandleError
-	r := RouteHandler{}
-	r.rcf = &ExecuteStruct{}
-	router.Methods("POST").Path("/v1-webhooks-generate").Handler(f(schemas, r.ConstructPayload))
+	router.Methods("POST").Path("/v1-webhooks").Handler(f(schemas, r.ConstructPayload))
+	router.Methods("GET").Path("/v1-webhooks").Handler(f(schemas, r.ListWebhooks))
+	router.Methods("GET").Path("/v1-webhooks/{id}").Handler(f(schemas, r.GetWebhook))
+	router.Methods("DELETE").Path("/v1-webhooks/{id}").Handler(f(schemas, r.DeleteWebhook))
 	router.Methods("POST").Path("/v1-webhooks-receiver").Handler(f(schemas, r.Execute))
-	router.Methods("GET").Path("/v1-webhooks-generate/schemas").Handler(api.SchemasHandler(schemas))
+	router.Methods("GET").Path("/v1-webhooks/schemas").Handler(api.SchemasHandler(schemas))
 
 	return router
 }
 
-func driverSchemas() *client.Schemas {
-	schemas := &client.Schemas{}
+func driverSchemas() *v1client.Schemas {
+	schemas := &v1client.Schemas{}
 
 	for key, value := range drivers.Drivers {
 		schemas.AddType(key, value.GetSchema())
 	}
 
-	schemas.AddType("apiVersion", client.Resource{})
-	schemas.AddType("schema", client.Schema{})
-	schemas.AddType("error", ServerAPIError{})
-	schemas.AddType("generatedWebhook", generatedWebhook{})
-
+	schemas.AddType("apiVersion", v1client.Resource{})
+	schemas.AddType("schema", v1client.Schema{})
+	schemas.AddType("error", model.ServerAPIError{})
+	schemas.AddType("webhook", model.Webhook{})
 	return schemas
 }
-
-type ServerAPIError struct {
-	client.Resource
-	Code    int    `json:"statusCode"`
-	Status  string `json:"status"`
-	Message string `json:"message"`
-}
-
-type generatedWebhook struct {
-	client.Resource
-	URL string `json:"url"`
-}
-
-func newGeneratedWebhook(context *api.ApiContext, url string) *generatedWebhook {
-	response := &generatedWebhook{
-		Resource: client.Resource{
-			Id:   "name",
-			Type: "generatedWebhook",
-		},
-		URL: url,
-	}
-	return response
-}
-
-type ExecuteStruct struct{}
