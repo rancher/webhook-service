@@ -23,18 +23,20 @@ var token string
 
 type ServiceScalerTest struct{}
 
-type mockGenericObject struct {
-	client.GenericObjectOperations
-	genericObject *client.GenericObject
+type mockWebhook struct {
+	client.WebhookOperations
+	webhook *client.Webhook
 }
 
-func (m *mockGenericObject) Create(genericObject *client.GenericObject) (*client.GenericObject, error) {
-	m.genericObject = genericObject
-	return genericObject, nil
+func (m *mockWebhook) Create(webhook *client.Webhook) (*client.Webhook, error) {
+	m.webhook = webhook
+	webhook.Links = make(map[string]string)
+	webhook.Links["self"] = "self"
+	return webhook, nil
 }
 
-func (m *mockGenericObject) List(opts *client.ListOpts) (*client.GenericObjectCollection, error) {
-	return &client.GenericObjectCollection{}, nil
+func (m *mockWebhook) List(opts *client.ListOpts) (*client.WebhookCollection, error) {
+	return &client.WebhookCollection{}, nil
 }
 
 func (s *ServiceScalerTest) Execute(payload map[string]interface{}, apiClient client.RancherClient) (int, error) {
@@ -56,9 +58,9 @@ type ExecuteStructTest struct{}
 
 func (e *ExecuteStructTest) GetClient(projectID string) (client.RancherClient, error) {
 	logrus.Infof("RancherClientFactory GetClient")
-	mockGenericObjectOps := &mockGenericObject{}
+	mockWebhook := &mockWebhook{}
 	mockClient := &client.RancherClient{
-		GenericObject: mockGenericObjectOps,
+		Webhook: mockWebhook,
 	}
 	return *mockClient, nil
 }
