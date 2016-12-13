@@ -44,9 +44,12 @@ func NewRouter() *mux.Router {
 	f := HandleError
 	r := RouteHandler{}
 	r.rcf = &ExecuteStruct{}
-	router.Methods("POST").Path("/v1-webhooks-generate").Handler(f(schemas, r.ConstructPayload))
+	router.Methods("POST").Path("/v1-webhooks").Handler(f(schemas, r.ConstructPayload))
+	router.Methods("GET").Path("/v1-webhooks").Handler(f(schemas, r.ListWebhooks))
+	router.Methods("GET").Path("/v1-webhooks/{id}").Handler(f(schemas, r.GetWebhook))
+	router.Methods("DELETE").Path("/v1-webhooks/{id}").Handler(f(schemas, r.DeleteWebhook))
 	router.Methods("POST").Path("/v1-webhooks-receiver").Handler(f(schemas, r.Execute))
-	router.Methods("GET").Path("/v1-webhooks-generate/schemas").Handler(api.SchemasHandler(schemas))
+	router.Methods("GET").Path("/v1-webhooks/schemas").Handler(api.SchemasHandler(schemas))
 
 	return router
 }
@@ -61,8 +64,7 @@ func driverSchemas() *client.Schemas {
 	schemas.AddType("apiVersion", client.Resource{})
 	schemas.AddType("schema", client.Schema{})
 	schemas.AddType("error", ServerAPIError{})
-	schemas.AddType("generatedWebhook", generatedWebhook{})
-
+	schemas.AddType("webhook", webhook{})
 	return schemas
 }
 
@@ -73,20 +75,41 @@ type ServerAPIError struct {
 	Message string `json:"message"`
 }
 
-type generatedWebhook struct {
+type webhook struct {
 	client.Resource
-	URL string `json:"url"`
+	URL                string               `json:"url"`
+	Driver             string               `json:"driver"`
+	Name               string               `json:"name"`
+	ScaleServiceConfig drivers.ScaleService `json:"scaleServiceConfig"`
 }
 
-func newGeneratedWebhook(context *api.ApiContext, url string) *generatedWebhook {
-	response := &generatedWebhook{
+type webhookCollection struct {
+	client.Collection
+	Data []webhook `json:"data,omitempty"`
+}
+
+func newWebhook(context *api.ApiContext, url string, links map[string]string, id string, driver string, name string, userConfig interface{}) *webhook {
+	webhook := &webhook{
 		Resource: client.Resource{
-			Id:   "name",
-			Type: "generatedWebhook",
+			Id:    id,
+			Type:  "webhook",
+			Links: links,
 		},
-		URL: url,
+		URL:    url,
+		Driver: driver,
+		Name:   name,
 	}
-	return response
+	ConfigName := driver + "Config"
+	switch ConfigName {
+	case "scaleServiceConfig":
+		config, ok := userConfig.(drivers.ScaleService)
+		if !ok {
+			return webhook
+		}
+		webhook.ScaleServiceConfig = config
+	}
+
+	return webhook
 }
 
 type ExecuteStruct struct{}

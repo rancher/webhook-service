@@ -7,8 +7,8 @@ import (
 	"net/http"
 )
 
+//ScaleService driver
 type ScaleService struct {
-	Driver      string  `json:"driver,omitempty"`
 	ServiceID   string  `json:"serviceId,omitempty"`
 	ScaleChange float64 `json:"amount,omitempty"`
 	ScaleAction string  `json:"action,omitempty"`
