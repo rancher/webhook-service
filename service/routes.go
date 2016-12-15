@@ -48,6 +48,8 @@ func NewRouter(privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey) *mux.Router
 	f := HandleError
 	r := RouteHandler{}
 	r.rcf = &ExecuteStruct{}
+	r.privateKey = privateKey
+	r.publicKey = publicKey
 	router.Methods("POST").Path("/v1-webhooks").Handler(f(schemas, r.ConstructPayload))
 	router.Methods("GET").Path("/v1-webhooks").Handler(f(schemas, r.ListWebhooks))
 	router.Methods("GET").Path("/v1-webhooks/{id}").Handler(f(schemas, r.GetWebhook))
