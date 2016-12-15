@@ -45,12 +45,13 @@ func NewRouter(r *RouteHandler) *mux.Router {
 	schemas = driverSchemas()
 	router := mux.NewRouter().StrictSlash(true)
 	f := HandleError
+	router.Methods("GET").Path("/v1-webhooks/schemas").Handler(api.SchemasHandler(schemas))
+	router.Methods("GET").Path("/v1-webhooks/schemas/{id}").Handler(api.SchemaHandler(schemas))
 	router.Methods("POST").Path("/v1-webhooks").Handler(f(schemas, r.ConstructPayload))
 	router.Methods("GET").Path("/v1-webhooks").Handler(f(schemas, r.ListWebhooks))
 	router.Methods("GET").Path("/v1-webhooks/{id}").Handler(f(schemas, r.GetWebhook))
 	router.Methods("DELETE").Path("/v1-webhooks/{id}").Handler(f(schemas, r.DeleteWebhook))
 	router.Methods("POST").Path("/v1-webhooks-receiver").Handler(f(schemas, r.Execute))
-	router.Methods("GET").Path("/v1-webhooks/schemas").Handler(api.SchemasHandler(schemas))
 
 	return router
 }
@@ -58,13 +59,22 @@ func NewRouter(r *RouteHandler) *mux.Router {
 func driverSchemas() *v1client.Schemas {
 	schemas := &v1client.Schemas{}
 
+	webhook := schemas.AddType("webhook", model.Webhook{})
 	for key, value := range drivers.Drivers {
-		schemas.AddType(key, value.GetSchema())
+		webhookField := key + "Config"
+		if field, ok := webhook.ResourceFields[webhookField]; ok {
+			field.Type = key
+			webhook.ResourceFields[webhookField] = field
+			driverConfig := schemas.AddType(key, value.GetSchema())
+			driverConfig.CollectionMethods = []string{}
+		} else {
+			logrus.Warnf("Skipping configured driver %v because it doesn't have a field on webhook", key)
+		}
 	}
 
 	schemas.AddType("apiVersion", v1client.Resource{})
 	schemas.AddType("schema", v1client.Schema{})
 	schemas.AddType("error", model.ServerAPIError{})
-	schemas.AddType("webhook", model.Webhook{})
+
 	return schemas
 }
