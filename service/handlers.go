@@ -3,19 +3,22 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"reflect"
+	"strings"
+	"time"
+
 	"github.com/Sirupsen/logrus"
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
 	"github.com/pborman/uuid"
+	"github.com/pkg/errors"
 	"github.com/rancher/go-rancher/api"
 	"github.com/rancher/go-rancher/v2"
 	"github.com/rancher/rancher-auth-service/util"
 	"github.com/rancher/webhook-service/config"
 	"github.com/rancher/webhook-service/drivers"
-	"io/ioutil"
-	"net/http"
-	// "reflect"
-	"time"
 )
 
 type RancherClientFactory interface {
@@ -24,24 +27,63 @@ type RancherClientFactory interface {
 
 func (rh *RouteHandler) ConstructPayload(w http.ResponseWriter, r *http.Request) (int, error) {
 	apiContext := api.GetApiContext(r)
-	webhookRequestData := make(map[string]interface{})
-	webhookRequest := webhook{}
+	wh := &webhook{}
 	var url string
 	logrus.Infof("Construct Payload")
 	bytes, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return 500, err
 	}
-	json.Unmarshal(bytes, &webhookRequestData)
-	json.Unmarshal(bytes, &webhookRequest)
-	userConfig := getDriverInterface(webhookRequest)
-	if userConfig == nil {
-		return 400, fmt.Errorf("Driver not provided/registered")
+
+	if err := json.Unmarshal(bytes, &wh); err != nil {
+		return 400, errors.Wrap(err, "Bad request body")
 	}
-	accountID := r.Header.Get("X-API-Project-Id")
-	if accountID == "" {
+
+	projectID := r.Header.Get("X-API-Project-Id")
+	if projectID == "" {
 		return 500, fmt.Errorf("Project ID not obtained from cattle")
 	}
+
+	if wh.Name == "" {
+		return 400, fmt.Errorf("Name not provided")
+	}
+
+	if wh.Driver == "" {
+		return 400, fmt.Errorf("Driver of not provided")
+	}
+
+	driverConfig := getDriverConfig(wh)
+	if driverConfig == nil {
+		return 400, fmt.Errorf("Invalid driver %v", wh.Driver)
+	}
+
+	driver := drivers.GetDriver(wh.Driver)
+	if driver == nil {
+		return 400, fmt.Errorf("Invalid driver %v", wh.Driver)
+	}
+
+	apiClient, err := rh.rcf.GetClient(projectID)
+	if err != nil {
+		return 500, err
+	}
+
+	code, err := driver.ValidatePayload(driverConfig, apiClient)
+	if err != nil {
+		return code, err
+	}
+
+	uuid := uuid.New()
+	config := map[string]interface{}{
+		"projectId": projectID,
+		"uuid":      uuid,
+		"driver":    wh.Driver,
+		"config":    driverConfig,
+	}
+	jwt, err := util.CreateTokenWithPayload(config, rh.privateKey)
+	if err != nil {
+		return 500, err
+	}
+
 	protocol := r.Header.Get("X-Forwarded-Proto")
 	if protocol != "" {
 		url = protocol + "://"
@@ -49,51 +91,17 @@ func (rh *RouteHandler) ConstructPayload(w http.ResponseWriter, r *http.Request)
 		url = "http://"
 	}
 	url = url + r.Host + "/v1-webhooks-receiver?token="
-	if _, ok := webhookRequestData["driver"].(string); !ok {
-		return 400, fmt.Errorf("Driver of type string not provided")
-	}
-	driverID := webhookRequestData["driver"].(string)
-	driver := drivers.GetDriver(driverID)
-	if driver == nil {
-		return 400, fmt.Errorf("Driver %s is not registered", driverID)
-	}
-
-	configName := driverID + "Config"
-	config, ok := webhookRequestData[configName].(map[string]interface{})
-	if !ok {
-		return 400, fmt.Errorf("Config %s not provided for driver %s", configName, driverID)
-	}
-
-	apiClient, err := rh.rcf.GetClient(accountID)
-	if err != nil {
-		return 500, err
-	}
-	code, err := driver.ValidatePayload(config, apiClient)
-	if err != nil {
-		return code, err
-	}
-	config["projectId"] = accountID
-	uuid := uuid.New()
-	config["uuid"] = uuid
-	config["driver"] = driverID
-	jwt, err := util.CreateTokenWithPayload(config, PrivateKey)
-	if err != nil {
-		return 500, err
-	}
-	name, ok := webhookRequestData["name"].(string)
-	if !ok {
-		return 400, fmt.Errorf("Name not provided")
-	}
 	jwt = url + jwt
 
 	//saveWebhook needs only user fields
-	webhook, err := saveWebhook(uuid, name, driverID, jwt, userConfig, apiClient)
+	webhook, err := saveWebhook(uuid, wh.Name, wh.Driver, jwt, driverConfig, apiClient)
 	if err != nil {
 		return 500, err
 	}
 
 	//needs only user fields
-	apiContext.WriteResource(newWebhook(apiContext, jwt, webhook.Links, webhook.Id, driverID, name, userConfig))
+	apiContext.WriteResource(newWebhook(apiContext, jwt, webhook.Links, webhook.Id, wh.Driver,
+		wh.Name, driverConfig))
 	return 200, nil
 }
 
@@ -103,7 +111,7 @@ func (rh *RouteHandler) Execute(w http.ResponseWriter, r *http.Request) (int, er
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
 		}
-		return PublicKey, nil
+		return rh.publicKey, nil
 	})
 
 	if err != nil || !token.Valid {
@@ -111,31 +119,37 @@ func (rh *RouteHandler) Execute(w http.ResponseWriter, r *http.Request) (int, er
 	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok {
-		if _, ok := claims["driver"].(string); !ok {
-			return 500, fmt.Errorf("Driver not found after decode")
+		driverID, ok := claims["driver"].(string)
+		if !ok {
+			return 400, fmt.Errorf("Driver not found after decode")
 		}
-		driverID := claims["driver"].(string)
+
 		driver := drivers.GetDriver(driverID)
 		if driver == nil {
 			return 400, fmt.Errorf("Driver %s is not registered", driverID)
 		}
-		if _, ok := claims["projectId"].(string); !ok {
-			return 500, fmt.Errorf("AccountId not provided by server")
+
+		projectID, ok := claims["projectId"].(string)
+		if !ok {
+			return 400, fmt.Errorf("Project not provided by server")
 		}
-		projectID := claims["projectId"].(string)
+
+		uuid, ok := claims["uuid"].(string)
+		if !ok {
+			return 400, fmt.Errorf("Uuid not found after decode")
+		}
+
 		apiClient, err := rh.rcf.GetClient(projectID)
 		if err != nil {
 			return 500, err
 		}
-		uuid, ok := claims["uuid"].(string)
-		if !ok {
-			return 500, fmt.Errorf("Uuid not found after decode")
-		}
+
 		code, err := validateWebhook(uuid, apiClient)
 		if err != nil {
 			return code, err
 		}
-		responseCode, err := driver.Execute(claims, apiClient)
+
+		responseCode, err := driver.Execute(claims["config"], apiClient)
 		if err != nil {
 			return responseCode, fmt.Errorf("Error %v in executing driver for %s", err, driverID)
 		}
@@ -270,12 +284,12 @@ func validateWebhook(uuid string, apiClient client.RancherClient) (int, error) {
 	return 403, fmt.Errorf("Requested webhook has been revoked")
 }
 
-func getDriverInterface(webhookRequest webhook) interface{} {
-	fmt.Printf("webhookRequest.Driver : %s\n", webhookRequest.Driver)
-	switch webhookRequest.Driver {
-	case "scaleService":
-		return drivers.ScaleService{}
-	default:
-		return nil
-	}
+func getDriverConfig(wh *webhook) interface{} {
+	r := reflect.ValueOf(wh)
+	f := reflect.Indirect(r).FieldByName(getDriverConfigFieldName(wh.Driver))
+	return f.Interface()
+}
+
+func getDriverConfigFieldName(driver string) string {
+	return strings.Title(driver) + "Config"
 }

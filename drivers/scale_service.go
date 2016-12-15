@@ -2,6 +2,7 @@ package drivers
 
 import (
 	"fmt"
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/rancher/go-rancher/v2"
 	"net/http"
@@ -9,44 +10,58 @@ import (
 
 //ScaleService driver
 type ScaleService struct {
-	ServiceID   string  `json:"serviceId,omitempty"`
-	ScaleChange float64 `json:"amount,omitempty"`
-	ScaleAction string  `json:"action,omitempty"`
+	ServiceID   string  `json:"serviceId,omitempty" mapstructure:"serviceId"`
+	ScaleChange float64 `json:"amount,omitempty" mapstructure:"amount"`
+	ScaleAction string  `json:"action,omitempty" mapstructure:"action"`
 }
 
-func (s *ScaleService) ValidatePayload(input map[string]interface{}, apiClient client.RancherClient) (int, error) {
-	action, ok := input["action"].(string)
+type ScaleServiceDriver struct {
+}
+
+func (s *ScaleServiceDriver) ValidatePayload(conf interface{}, apiClient client.RancherClient) (int, error) {
+	config, ok := conf.(ScaleService)
 	if !ok {
-		return http.StatusBadRequest, fmt.Errorf("Scale action of type string not provided")
+		return http.StatusInternalServerError, fmt.Errorf("Can't process config")
 	}
-	if action != "up" && action != "down" {
-		return http.StatusBadRequest, fmt.Errorf("Invalid action for scaleService driver")
+
+	if config.ScaleAction == "" {
+		return http.StatusBadRequest, fmt.Errorf("Scale action not provided")
 	}
-	_, ok = input["amount"].(float64)
-	if !ok {
-		return http.StatusBadRequest, fmt.Errorf("Scale amount of type float64 not provided")
+
+	if config.ScaleAction != "up" && config.ScaleAction != "down" {
+		return http.StatusBadRequest, fmt.Errorf("Invalid action %v", config.ScaleAction)
 	}
-	serviceID, ok := input["serviceId"].(string)
-	if !ok {
-		return http.StatusBadRequest, fmt.Errorf("serviceId of type string not provided")
+
+	if config.ScaleChange <= 0 {
+		return http.StatusBadRequest, fmt.Errorf("Invalice change: %v", config.ScaleChange)
 	}
-	service, err := apiClient.Service.ById(serviceID)
+
+	if config.ServiceID == "" {
+		return http.StatusBadRequest, fmt.Errorf("ServiceId not provided")
+	}
+
+	service, err := apiClient.Service.ById(config.ServiceID)
 	if err != nil {
 		return http.StatusInternalServerError, errors.Wrap(err, "Error in getService")
 	}
 
-	if service == nil {
-		return http.StatusBadRequest, fmt.Errorf("Requested service does not exist")
+	if service == nil || service.Removed != "" {
+		return http.StatusBadRequest, fmt.Errorf("Invalid service %v", config.ServiceID)
 	}
+
 	return http.StatusOK, nil
 }
 
-func (s *ScaleService) Execute(payload map[string]interface{}, apiClient client.RancherClient) (int, error) {
+func (s *ScaleServiceDriver) Execute(conf interface{}, apiClient client.RancherClient) (int, error) {
+	config := &ScaleService{}
+	err := mapstructure.Decode(conf, config)
+	if err != nil {
+		return http.StatusInternalServerError, errors.Wrap(err, "Couldn't unmarshal config")
+	}
 	var newScale int64
-
-	serviceID := payload["serviceId"].(string)
-	scaleAction := payload["action"].(string)
-	scaleChange := payload["amount"].(float64)
+	serviceID := config.ServiceID
+	scaleAction := config.ScaleAction
+	scaleChange := config.ScaleChange
 
 	service, err := apiClient.Service.ById(serviceID)
 	if err != nil {
@@ -68,10 +83,9 @@ func (s *ScaleService) Execute(payload map[string]interface{}, apiClient client.
 	if err != nil {
 		return http.StatusInternalServerError, errors.Wrap(err, "Error in updateService")
 	}
-	payload["newScale"] = newScale
 	return http.StatusOK, nil
 }
 
-func (s *ScaleService) GetSchema() interface{} {
+func (s *ScaleServiceDriver) GetSchema() interface{} {
 	return ScaleService{}
 }

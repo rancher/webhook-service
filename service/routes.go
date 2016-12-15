@@ -1,13 +1,15 @@
 package service
 
 import (
+	"crypto/rsa"
+	"net/http"
+
 	"github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
 	"github.com/rancher/go-rancher/api"
-	"github.com/rancher/go-rancher/client"
-	//This should be v2, supporting schemas
 	"github.com/rancher/webhook-service/drivers"
-	"net/http"
+	//This should be v2, supporting schemas
+	"github.com/rancher/go-rancher/client"
 )
 
 var schemas *client.Schemas
@@ -35,10 +37,12 @@ func HandleError(s *client.Schemas, t func(http.ResponseWriter, *http.Request) (
 }
 
 type RouteHandler struct {
-	rcf RancherClientFactory
+	rcf        RancherClientFactory
+	privateKey *rsa.PrivateKey
+	publicKey  *rsa.PublicKey
 }
 
-func NewRouter() *mux.Router {
+func NewRouter(privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey) *mux.Router {
 	schemas = driverSchemas()
 	router = mux.NewRouter().StrictSlash(true)
 	f := HandleError
