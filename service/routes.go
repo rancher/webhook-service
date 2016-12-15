@@ -10,10 +10,10 @@ import (
 	"github.com/rancher/webhook-service/drivers"
 	//This should be v2, supporting schemas
 	"github.com/rancher/go-rancher/client"
+	"github.com/rancher/webhook-service/model"
 )
 
 var schemas *client.Schemas
-var router *mux.Router
 
 func HandleError(s *client.Schemas, t func(http.ResponseWriter, *http.Request) (int, error)) http.Handler {
 	return api.ApiHandler(s, http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
@@ -21,7 +21,7 @@ func HandleError(s *client.Schemas, t func(http.ResponseWriter, *http.Request) (
 			apiContext := api.GetApiContext(req)
 			logrus.Errorf("Error in request: %v", err)
 			rw.WriteHeader(code)
-			writeErr := apiContext.WriteResource(&ServerAPIError{
+			writeErr := apiContext.WriteResource(&model.ServerAPIError{
 				Resource: client.Resource{
 					Type: "error",
 				},
@@ -37,19 +37,15 @@ func HandleError(s *client.Schemas, t func(http.ResponseWriter, *http.Request) (
 }
 
 type RouteHandler struct {
-	rcf        RancherClientFactory
-	privateKey *rsa.PrivateKey
-	publicKey  *rsa.PublicKey
+	ClientFactory RancherClientFactory
+	PrivateKey    *rsa.PrivateKey
+	PublicKey     *rsa.PublicKey
 }
 
-func NewRouter(privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey) *mux.Router {
+func NewRouter(r *RouteHandler) *mux.Router {
 	schemas = driverSchemas()
-	router = mux.NewRouter().StrictSlash(true)
+	router := mux.NewRouter().StrictSlash(true)
 	f := HandleError
-	r := RouteHandler{}
-	r.rcf = &ExecuteStruct{}
-	r.privateKey = privateKey
-	r.publicKey = publicKey
 	router.Methods("POST").Path("/v1-webhooks").Handler(f(schemas, r.ConstructPayload))
 	router.Methods("GET").Path("/v1-webhooks").Handler(f(schemas, r.ListWebhooks))
 	router.Methods("GET").Path("/v1-webhooks/{id}").Handler(f(schemas, r.GetWebhook))
@@ -69,33 +65,13 @@ func driverSchemas() *client.Schemas {
 
 	schemas.AddType("apiVersion", client.Resource{})
 	schemas.AddType("schema", client.Schema{})
-	schemas.AddType("error", ServerAPIError{})
-	schemas.AddType("webhook", webhook{})
+	schemas.AddType("error", model.ServerAPIError{})
+	schemas.AddType("webhook", model.Webhook{})
 	return schemas
 }
 
-type ServerAPIError struct {
-	client.Resource
-	Code    int    `json:"statusCode"`
-	Status  string `json:"status"`
-	Message string `json:"message"`
-}
-
-type webhook struct {
-	client.Resource
-	URL                string               `json:"url"`
-	Driver             string               `json:"driver"`
-	Name               string               `json:"name"`
-	ScaleServiceConfig drivers.ScaleService `json:"scaleServiceConfig"`
-}
-
-type webhookCollection struct {
-	client.Collection
-	Data []webhook `json:"data,omitempty"`
-}
-
-func newWebhook(context *api.ApiContext, url string, links map[string]string, id string, driver string, name string, userConfig interface{}) *webhook {
-	webhook := &webhook{
+func newWebhook(context *api.ApiContext, url string, links map[string]string, id string, driver string, name string, userConfig interface{}) *model.Webhook {
+	webhook := &model.Webhook{
 		Resource: client.Resource{
 			Id:    id,
 			Type:  "webhook",
@@ -108,10 +84,8 @@ func newWebhook(context *api.ApiContext, url string, links map[string]string, id
 	ConfigName := driver + "Config"
 	switch ConfigName {
 	case "scaleServiceConfig":
-		webhook.ScaleServiceConfig = userConfig.(drivers.ScaleService)
+		webhook.ScaleServiceConfig = userConfig.(model.ScaleService)
 	}
 
 	return webhook
 }
-
-type ExecuteStruct struct{}

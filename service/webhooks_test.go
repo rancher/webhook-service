@@ -10,30 +10,50 @@ import (
 	"testing"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/gorilla/mux"
 	"github.com/mitchellh/mapstructure"
 	"github.com/rancher/go-rancher/v2"
 	"github.com/rancher/rancher-auth-service/util"
 	"github.com/rancher/webhook-service/drivers"
+	"github.com/rancher/webhook-service/model"
 )
 
 var server *httptest.Server
+var router *mux.Router
+var r *RouteHandler
 
 // TODO Refactor this test to use gocheck
 func init() {
 	drivers.Drivers = map[string]drivers.WebhookDriver{}
 
-	expected := drivers.ScaleService{
+	expected := model.ScaleService{
 		ScaleAction: "up",
 		ScaleChange: 1,
 		ServiceID:   "id",
 	}
 	drivers.Drivers["scaleService"] = &MockDriver{expectedConfig: expected}
-	server = httptest.NewServer(NewRouter(nil, nil))
+
+	privateKey := util.ParsePrivateKey("../testutils/private.pem")
+	publicKey := util.ParsePublicKey("../testutils/public.pem")
+	r = &RouteHandler{
+		PrivateKey: privateKey,
+		PublicKey:  publicKey,
+	}
+
+	mockWebhook := &mockWebhook{
+		created: map[string]*client.Webhook{},
+	}
+	r.ClientFactory = &MockRancherClientFactory{
+		mw: mockWebhook,
+	}
+	router = NewRouter(r)
+	server = httptest.NewServer(router)
 }
 
-func TestWebhookFramework(t *testing.T) {
+func TestWebhookCreateAndExecute(t *testing.T) {
+	// Test creating a webhook
 	constructURL := fmt.Sprintf("%s/v1-webhooks", server.URL)
-	jsonStr := []byte(`{"driver":"scaleService","name":"Test service scale_1",
+	jsonStr := []byte(`{"driver":"scaleService","name":"wh-name",
 		"scaleServiceConfig": {"serviceId": "id", "amount": 1, "action": "up"}}`)
 	request, err := http.NewRequest("POST", constructURL, bytes.NewBuffer(jsonStr))
 	if err != nil {
@@ -41,19 +61,9 @@ func TestWebhookFramework(t *testing.T) {
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-API-Project-Id", "1a1")
-
 	response := httptest.NewRecorder()
-
-	privateKey := util.ParsePrivateKey("../testutils/private.pem")
-	publicKey := util.ParsePublicKey("../testutils/public.pem")
-	r := RouteHandler{
-		privateKey: privateKey,
-		publicKey:  publicKey,
-	}
-	r.rcf = &MockRancherClientFactory{}
 	handler := HandleError(schemas, r.ConstructPayload)
 	handler.ServeHTTP(response, request)
-
 	if response.Code != 200 {
 		t.Fatalf("StatusCode %d means ConstructPayloadTest failed", response.Code)
 	}
@@ -61,15 +71,41 @@ func TestWebhookFramework(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	payload := make(map[string]interface{})
-	err = json.Unmarshal(resp, &payload)
+	wh := &model.Webhook{}
+	err = json.Unmarshal(resp, wh)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	url := payload["url"].(string)
+	// Test getting the created webhook by id
+	byID := constructURL + "/1"
+	request, err = http.NewRequest("GET", byID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-API-Project-Id", "1a1")
+	response = httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != 200 {
+		t.Fatalf("StatusCode %d means get failed", response.Code)
+	}
+	resp, err = ioutil.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wh = &model.Webhook{}
+	err = json.Unmarshal(resp, wh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wh.Name != "wh-name" || wh.Driver != "scaleService" || wh.Id != "1" || wh.URL == "" || wh.ScaleServiceConfig.ServiceID != "id" ||
+		wh.ScaleServiceConfig.ScaleAction != "up" || wh.ScaleServiceConfig.ScaleChange != 1 {
+		t.Fatalf("Unexpected webhook: %#v", wh)
+	}
 
+	// Test executing the webhook
+	url := wh.URL
 	request, err = http.NewRequest("POST", url, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -83,11 +119,11 @@ func TestWebhookFramework(t *testing.T) {
 }
 
 type MockDriver struct {
-	expectedConfig drivers.ScaleService
+	expectedConfig model.ScaleService
 }
 
 func (s *MockDriver) Execute(conf interface{}, apiClient client.RancherClient) (int, error) {
-	config := &drivers.ScaleService{}
+	config := &model.ScaleService{}
 	err := mapstructure.Decode(conf, config)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("Couldn't unmarshal config: %v", err)
@@ -110,7 +146,7 @@ func (s *MockDriver) Execute(conf interface{}, apiClient client.RancherClient) (
 }
 
 func (s *MockDriver) ValidatePayload(conf interface{}, apiClient client.RancherClient) (int, error) {
-	config, ok := conf.(drivers.ScaleService)
+	config, ok := conf.(model.ScaleService)
 	if !ok {
 		return http.StatusInternalServerError, fmt.Errorf("Can't process config")
 	}
@@ -132,32 +168,56 @@ func (s *MockDriver) ValidatePayload(conf interface{}, apiClient client.RancherC
 }
 
 func (s *MockDriver) GetSchema() interface{} {
-	return drivers.ScaleService{}
+	return model.ScaleService{}
 }
 
-type MockRancherClientFactory struct{}
+func (s *MockDriver) ConvertToConfigAndSetOnWebhook(configMap map[string]interface{}, webhook *model.Webhook) error {
+	config := model.ScaleService{}
+	err := mapstructure.Decode(configMap, &config)
+	if err != nil {
+		return err
+	}
+	webhook.ScaleServiceConfig = config
+	return nil
+}
+
+type MockRancherClientFactory struct {
+	mw *mockWebhook
+}
 
 func (e *MockRancherClientFactory) GetClient(projectID string) (client.RancherClient, error) {
 	logrus.Infof("RancherClientFactory GetClient")
-	mockWebhook := &mockWebhook{}
+
 	mockClient := &client.RancherClient{
-		Webhook: mockWebhook,
+		Webhook: e.mw,
 	}
 	return *mockClient, nil
 }
 
 type mockWebhook struct {
 	client.WebhookOperations
-	webhook *client.Webhook
+	created map[string]*client.Webhook
 }
 
 func (m *mockWebhook) Create(webhook *client.Webhook) (*client.Webhook, error) {
-	m.webhook = webhook
 	webhook.Links = make(map[string]string)
 	webhook.Links["self"] = "self"
+	webhook.Id = "1"
+	m.created[webhook.Id] = webhook
 	return webhook, nil
 }
 
 func (m *mockWebhook) List(opts *client.ListOpts) (*client.WebhookCollection, error) {
-	return &client.WebhookCollection{Data: []client.Webhook{{}}}, nil
+	webhooks := []client.Webhook{}
+	for _, wh := range m.created {
+		webhooks = append(webhooks, *wh)
+	}
+	return &client.WebhookCollection{Data: webhooks}, nil
+}
+
+func (m *mockWebhook) ById(id string) (*client.Webhook, error) {
+	if wh, ok := m.created[id]; ok {
+		return wh, nil
+	}
+	return nil, fmt.Errorf("Doesn't exist")
 }

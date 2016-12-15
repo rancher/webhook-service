@@ -2,24 +2,19 @@ package drivers
 
 import (
 	"fmt"
+	"net/http"
+
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/rancher/go-rancher/v2"
-	"net/http"
+	"github.com/rancher/webhook-service/model"
 )
-
-//ScaleService driver
-type ScaleService struct {
-	ServiceID   string  `json:"serviceId,omitempty" mapstructure:"serviceId"`
-	ScaleChange float64 `json:"amount,omitempty" mapstructure:"amount"`
-	ScaleAction string  `json:"action,omitempty" mapstructure:"action"`
-}
 
 type ScaleServiceDriver struct {
 }
 
 func (s *ScaleServiceDriver) ValidatePayload(conf interface{}, apiClient client.RancherClient) (int, error) {
-	config, ok := conf.(ScaleService)
+	config, ok := conf.(model.ScaleService)
 	if !ok {
 		return http.StatusInternalServerError, fmt.Errorf("Can't process config")
 	}
@@ -53,7 +48,7 @@ func (s *ScaleServiceDriver) ValidatePayload(conf interface{}, apiClient client.
 }
 
 func (s *ScaleServiceDriver) Execute(conf interface{}, apiClient client.RancherClient) (int, error) {
-	config := &ScaleService{}
+	config := &model.ScaleService{}
 	err := mapstructure.Decode(conf, config)
 	if err != nil {
 		return http.StatusInternalServerError, errors.Wrap(err, "Couldn't unmarshal config")
@@ -86,6 +81,16 @@ func (s *ScaleServiceDriver) Execute(conf interface{}, apiClient client.RancherC
 	return http.StatusOK, nil
 }
 
+func (s *ScaleServiceDriver) ConvertToConfigAndSetOnWebhook(configMap map[string]interface{}, webhook *model.Webhook) error {
+	config := model.ScaleService{}
+	err := mapstructure.Decode(configMap, &config)
+	if err != nil {
+		return err
+	}
+	webhook.ScaleServiceConfig = config
+	return nil
+}
+
 func (s *ScaleServiceDriver) GetSchema() interface{} {
-	return ScaleService{}
+	return model.ScaleService{}
 }

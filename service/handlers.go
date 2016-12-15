@@ -1,9 +1,13 @@
 package service
 
 import (
-	"crypto/rsa"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"reflect"
+	"strings"
+
 	"github.com/Sirupsen/logrus"
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
@@ -13,23 +17,13 @@ import (
 	"github.com/rancher/go-rancher/api"
 	"github.com/rancher/go-rancher/v2"
 	"github.com/rancher/rancher-auth-service/util"
-	"github.com/rancher/webhook-service/config"
 	"github.com/rancher/webhook-service/drivers"
-	"github.com/urfave/cli"
-	"io/ioutil"
-	"net/http"
-	"reflect"
-	"strings"
-	"time"
+	"github.com/rancher/webhook-service/model"
 )
-
-type RancherClientFactory interface {
-	GetClient(projectID string) (client.RancherClient, error)
-}
 
 func (rh *RouteHandler) ConstructPayload(w http.ResponseWriter, r *http.Request) (int, error) {
 	apiContext := api.GetApiContext(r)
-	wh := &webhook{}
+	wh := &model.Webhook{}
 	var url string
 	logrus.Infof("Construct Payload")
 	bytes, err := ioutil.ReadAll(r.Body)
@@ -64,7 +58,7 @@ func (rh *RouteHandler) ConstructPayload(w http.ResponseWriter, r *http.Request)
 		return 400, fmt.Errorf("Invalid driver %v", wh.Driver)
 	}
 
-	apiClient, err := rh.rcf.GetClient(projectID)
+	apiClient, err := rh.ClientFactory.GetClient(projectID)
 	if err != nil {
 		return 500, err
 	}
@@ -81,7 +75,7 @@ func (rh *RouteHandler) ConstructPayload(w http.ResponseWriter, r *http.Request)
 		"driver":    wh.Driver,
 		"config":    driverConfig,
 	}
-	jwt, err := util.CreateTokenWithPayload(config, rh.privateKey)
+	jwt, err := util.CreateTokenWithPayload(config, rh.PrivateKey)
 	if err != nil {
 		return 500, err
 	}
@@ -113,7 +107,7 @@ func (rh *RouteHandler) Execute(w http.ResponseWriter, r *http.Request) (int, er
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
 		}
-		return rh.publicKey, nil
+		return rh.PublicKey, nil
 	})
 
 	if err != nil || !token.Valid {
@@ -141,7 +135,7 @@ func (rh *RouteHandler) Execute(w http.ResponseWriter, r *http.Request) (int, er
 			return 400, fmt.Errorf("Uuid not found after decode")
 		}
 
-		apiClient, err := rh.rcf.GetClient(projectID)
+		apiClient, err := rh.ClientFactory.GetClient(projectID)
 		if err != nil {
 			return 500, err
 		}
@@ -165,14 +159,14 @@ func (rh *RouteHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) (in
 	if projectID == "" {
 		return 400, fmt.Errorf("Project ID not obtained from cattle")
 	}
-	apiClient, err := rh.rcf.GetClient(projectID)
+	apiClient, err := rh.ClientFactory.GetClient(projectID)
 	if err != nil {
 		return 500, err
 	}
 	webhooks, err := apiClient.Webhook.List(&client.ListOpts{})
-	response := []webhook{}
+	response := []model.Webhook{}
 	for _, webhook := range webhooks.Data {
-		config := drivers.ScaleService{}
+		config := model.ScaleService{}
 		err = mapstructure.Decode(webhook.Config, &config)
 		if err != nil {
 			return 500, err
@@ -180,7 +174,7 @@ func (rh *RouteHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) (in
 		respWebhook := newWebhook(apiContext, webhook.Url, webhook.Links, webhook.Id, webhook.Driver, webhook.Name, config)
 		response = append(response, *respWebhook)
 	}
-	apiContext.Write(&webhookCollection{Data: response})
+	apiContext.Write(&model.WebhookCollection{Data: response})
 	return 200, nil
 }
 
@@ -188,11 +182,13 @@ func (rh *RouteHandler) GetWebhook(w http.ResponseWriter, r *http.Request) (int,
 	apiContext := api.GetApiContext(r)
 	vars := mux.Vars(r)
 	webhookID := vars["id"]
+	logrus.Infof("Getting webhook %v", webhookID)
+
 	projectID := r.Header.Get("X-API-Project-Id")
 	if projectID == "" {
 		return 400, fmt.Errorf("Project ID not obtained from cattle")
 	}
-	apiClient, err := rh.rcf.GetClient(projectID)
+	apiClient, err := rh.ClientFactory.GetClient(projectID)
 	if err != nil {
 		return 500, err
 	}
@@ -204,7 +200,7 @@ func (rh *RouteHandler) GetWebhook(w http.ResponseWriter, r *http.Request) (int,
 		fmt.Printf("webhook : %v\n", webhook)
 		return 400, nil
 	}
-	config := drivers.ScaleService{}
+	config := model.ScaleService{}
 	err = mapstructure.Decode(webhook.Config, &config)
 	if err != nil {
 		return 500, err
@@ -221,7 +217,7 @@ func (rh *RouteHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) (i
 	if projectID == "" {
 		return 400, fmt.Errorf("Project ID not obtained from cattle")
 	}
-	apiClient, err := rh.rcf.GetClient(projectID)
+	apiClient, err := rh.ClientFactory.GetClient(projectID)
 	if err != nil {
 		return 500, err
 	}
@@ -235,21 +231,6 @@ func (rh *RouteHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) (i
 		return 500, err
 	}
 	return 200, nil
-}
-
-func (e *ExecuteStruct) GetClient(projectID string) (client.RancherClient, error) {
-	config := config.GetConfig()
-	url := fmt.Sprintf("%s/projects/%s/schemas", config.CattleURL, projectID)
-	apiClient, err := client.NewRancherClient(&client.ClientOpts{
-		Timeout:   time.Second * 30,
-		Url:       url,
-		AccessKey: config.CattleAccessKey,
-		SecretKey: config.CattleSecretKey,
-	})
-	if err != nil {
-		return client.RancherClient{}, fmt.Errorf("Error in creating API client")
-	}
-	return *apiClient, nil
 }
 
 func saveWebhook(uuid string, name string, driver string, url string, input interface{}, apiClient client.RancherClient) (*client.Webhook, error) {
@@ -282,7 +263,7 @@ func validateWebhook(uuid string, apiClient client.RancherClient) (int, error) {
 	return 403, fmt.Errorf("Requested webhook has been revoked")
 }
 
-func getDriverConfig(wh *webhook) interface{} {
+func getDriverConfig(wh *model.Webhook) interface{} {
 	r := reflect.ValueOf(wh)
 	f := reflect.Indirect(r).FieldByName(getDriverConfigFieldName(wh.Driver))
 	return f.Interface()
@@ -290,38 +271,4 @@ func getDriverConfig(wh *webhook) interface{} {
 
 func getDriverConfigFieldName(driver string) string {
 	return strings.Title(driver) + "Config"
-}
-
-func GetKeys(c *cli.Context) (*rsa.PrivateKey, *rsa.PublicKey, error) {
-	var PrivateKey *rsa.PrivateKey
-	var PublicKey *rsa.PublicKey
-	privateKeyFile := c.GlobalString("rsa-private-key-file")
-	privateKeyFileContents := c.GlobalString("rsa-private-key-contents")
-
-	if privateKeyFile != "" && privateKeyFileContents != "" {
-		return nil, nil, fmt.Errorf("Can't specify both, file and contents, halting")
-	}
-	if privateKeyFile != "" {
-		PrivateKey = util.ParsePrivateKey(privateKeyFile)
-	} else if privateKeyFileContents != "" {
-		PrivateKey = util.ParsePrivateKeyContents(privateKeyFileContents)
-	} else {
-		return nil, nil, fmt.Errorf("Please provide either rsa-private-key-file or rsa-private-key-contents, halting")
-	}
-
-	publicKeyFile := c.GlobalString("rsa-public-key-file")
-	publicKeyFileContents := c.GlobalString("rsa-public-key-contents")
-
-	if publicKeyFile != "" && publicKeyFileContents != "" {
-		return nil, nil, fmt.Errorf("Can't specify both, file and contents, halting")
-	}
-	if publicKeyFile != "" {
-		PublicKey = util.ParsePublicKey(publicKeyFile)
-	} else if publicKeyFileContents != "" {
-		PublicKey = util.ParsePublicKeyContents(publicKeyFileContents)
-	} else {
-		return nil, nil, fmt.Errorf("Please provide either rsa-public-key-file or rsa-public-key-contents, halting")
-	}
-
-	return PrivateKey, PublicKey, nil
 }

@@ -56,7 +56,12 @@ func StartWebhook(c *cli.Context) {
 	if err != nil {
 		log.Fatal("rsa-private-key-file or rsa-public-key-file not provided, halting")
 	}
-	router := service.NewRouter(privateKey, publicKey)
+	rh := &service.RouteHandler{
+		PrivateKey:    privateKey,
+		PublicKey:     publicKey,
+		ClientFactory: &service.ClientFactory{},
+	}
+	router := service.NewRouter(rh)
 	log.Infof("Webhook service listening on 8085")
 	log.Fatal(http.ListenAndServe(":8085", router))
 }
