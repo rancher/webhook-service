@@ -8,10 +8,8 @@ type RancherClient struct {
 	AddOutputsInput                          AddOutputsInputOperations
 	AddRemoveServiceLinkInput                AddRemoveServiceLinkInputOperations
 	Agent                                    AgentOperations
-	Amazonec2Config                          Amazonec2ConfigOperations
 	ApiKey                                   ApiKeyOperations
 	AuditLog                                 AuditLogOperations
-	AzureConfig                              AzureConfigOperations
 	Azureadconfig                            AzureadconfigOperations
 	Backup                                   BackupOperations
 	BackupTarget                             BackupTargetOperations
@@ -21,6 +19,7 @@ type RancherClient struct {
 	CatalogTemplate                          CatalogTemplateOperations
 	Certificate                              CertificateOperations
 	ChangeSecretInput                        ChangeSecretInputOperations
+	ClusterMembership                        ClusterMembershipOperations
 	ComposeConfig                            ComposeConfigOperations
 	ComposeConfigInput                       ComposeConfigInputOperations
 	ComposeProject                           ComposeProjectOperations
@@ -36,7 +35,6 @@ type RancherClient struct {
 	Databasechangelog                        DatabasechangelogOperations
 	Databasechangeloglock                    DatabasechangeloglockOperations
 	DefaultNetwork                           DefaultNetworkOperations
-	DigitaloceanConfig                       DigitaloceanConfigOperations
 	DnsService                               DnsServiceOperations
 	DockerBuild                              DockerBuildOperations
 	DynamicSchema                            DynamicSchemaOperations
@@ -54,7 +52,6 @@ type RancherClient struct {
 	ExternalStoragePoolEvent                 ExternalStoragePoolEventOperations
 	ExternalVolumeEvent                      ExternalVolumeEventOperations
 	FieldDocumentation                       FieldDocumentationOperations
-	GenericObject                            GenericObjectOperations
 	HaConfig                                 HaConfigOperations
 	HaConfigInput                            HaConfigInputOperations
 	HealthcheckInstanceHostMap               HealthcheckInstanceHostMapOperations
@@ -92,7 +89,6 @@ type RancherClient struct {
 	NetworkDriverService                     NetworkDriverServiceOperations
 	NfsConfig                                NfsConfigOperations
 	Openldapconfig                           OpenldapconfigOperations
-	PacketConfig                             PacketConfigOperations
 	Password                                 PasswordOperations
 	PhysicalHost                             PhysicalHostOperations
 	Port                                     PortOperations
@@ -156,6 +152,7 @@ type RancherClient struct {
 	VolumeActivateInput                      VolumeActivateInputOperations
 	VolumeSnapshotInput                      VolumeSnapshotInputOperations
 	VolumeTemplate                           VolumeTemplateOperations
+	Webhook                                  WebhookOperations
 }
 
 func constructClient(rancherBaseClient *RancherBaseClientImpl) *RancherClient {
@@ -168,10 +165,8 @@ func constructClient(rancherBaseClient *RancherBaseClientImpl) *RancherClient {
 	client.AddOutputsInput = newAddOutputsInputClient(client)
 	client.AddRemoveServiceLinkInput = newAddRemoveServiceLinkInputClient(client)
 	client.Agent = newAgentClient(client)
-	client.Amazonec2Config = newAmazonec2ConfigClient(client)
 	client.ApiKey = newApiKeyClient(client)
 	client.AuditLog = newAuditLogClient(client)
-	client.AzureConfig = newAzureConfigClient(client)
 	client.Azureadconfig = newAzureadconfigClient(client)
 	client.Backup = newBackupClient(client)
 	client.BackupTarget = newBackupTargetClient(client)
@@ -181,6 +176,7 @@ func constructClient(rancherBaseClient *RancherBaseClientImpl) *RancherClient {
 	client.CatalogTemplate = newCatalogTemplateClient(client)
 	client.Certificate = newCertificateClient(client)
 	client.ChangeSecretInput = newChangeSecretInputClient(client)
+	client.ClusterMembership = newClusterMembershipClient(client)
 	client.ComposeConfig = newComposeConfigClient(client)
 	client.ComposeConfigInput = newComposeConfigInputClient(client)
 	client.ComposeProject = newComposeProjectClient(client)
@@ -196,7 +192,6 @@ func constructClient(rancherBaseClient *RancherBaseClientImpl) *RancherClient {
 	client.Databasechangelog = newDatabasechangelogClient(client)
 	client.Databasechangeloglock = newDatabasechangeloglockClient(client)
 	client.DefaultNetwork = newDefaultNetworkClient(client)
-	client.DigitaloceanConfig = newDigitaloceanConfigClient(client)
 	client.DnsService = newDnsServiceClient(client)
 	client.DockerBuild = newDockerBuildClient(client)
 	client.DynamicSchema = newDynamicSchemaClient(client)
@@ -214,7 +209,6 @@ func constructClient(rancherBaseClient *RancherBaseClientImpl) *RancherClient {
 	client.ExternalStoragePoolEvent = newExternalStoragePoolEventClient(client)
 	client.ExternalVolumeEvent = newExternalVolumeEventClient(client)
 	client.FieldDocumentation = newFieldDocumentationClient(client)
-	client.GenericObject = newGenericObjectClient(client)
 	client.HaConfig = newHaConfigClient(client)
 	client.HaConfigInput = newHaConfigInputClient(client)
 	client.HealthcheckInstanceHostMap = newHealthcheckInstanceHostMapClient(client)
@@ -252,7 +246,6 @@ func constructClient(rancherBaseClient *RancherBaseClientImpl) *RancherClient {
 	client.NetworkDriverService = newNetworkDriverServiceClient(client)
 	client.NfsConfig = newNfsConfigClient(client)
 	client.Openldapconfig = newOpenldapconfigClient(client)
-	client.PacketConfig = newPacketConfigClient(client)
 	client.Password = newPasswordClient(client)
 	client.PhysicalHost = newPhysicalHostClient(client)
 	client.Port = newPortClient(client)
@@ -316,6 +309,7 @@ func constructClient(rancherBaseClient *RancherBaseClientImpl) *RancherClient {
 	client.VolumeActivateInput = newVolumeActivateInputClient(client)
 	client.VolumeSnapshotInput = newVolumeSnapshotInputClient(client)
 	client.VolumeTemplate = newVolumeTemplateClient(client)
+	client.Webhook = newWebhookClient(client)
 
 	return client
 }
