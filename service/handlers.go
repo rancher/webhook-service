@@ -11,10 +11,10 @@ import (
 	"github.com/Sirupsen/logrus"
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
-	"github.com/mitchellh/mapstructure"
 	"github.com/pborman/uuid"
 	"github.com/pkg/errors"
 	"github.com/rancher/go-rancher/api"
+	v1client "github.com/rancher/go-rancher/client"
 	"github.com/rancher/go-rancher/v2"
 	"github.com/rancher/rancher-auth-service/util"
 	"github.com/rancher/webhook-service/drivers"
@@ -96,8 +96,11 @@ func (rh *RouteHandler) ConstructPayload(w http.ResponseWriter, r *http.Request)
 	}
 
 	//needs only user fields
-	apiContext.WriteResource(newWebhook(apiContext, jwt, webhook.Links, webhook.Id, wh.Driver,
-		wh.Name, driverConfig))
+	whResponse, err := newWebhook(apiContext, jwt, webhook.Links, webhook.Id, wh.Driver, wh.Name, driverConfig, driver)
+	if err != nil {
+		return 500, errors.Wrap(err, "Unable to create webhook response")
+	}
+	apiContext.WriteResource(whResponse)
 	return 200, nil
 }
 
@@ -166,12 +169,19 @@ func (rh *RouteHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) (in
 	webhooks, err := apiClient.Webhook.List(&client.ListOpts{})
 	response := []model.Webhook{}
 	for _, webhook := range webhooks.Data {
-		config := model.ScaleService{}
-		err = mapstructure.Decode(webhook.Config, &config)
-		if err != nil {
-			return 500, err
+		driver := drivers.GetDriver(webhook.Driver)
+		if driver == nil {
+			logrus.Warnf("Skipping webhook %#v because driver cannot be located", webhook)
+			continue
 		}
-		respWebhook := newWebhook(apiContext, webhook.Url, webhook.Links, webhook.Id, webhook.Driver, webhook.Name, config)
+
+		respWebhook, err := newWebhook(apiContext, webhook.Url, webhook.Links, webhook.Id, webhook.Driver, webhook.Name,
+			webhook.Config, driver)
+		if err != nil {
+			logrus.Warnf("Skipping webhook %#v an error ocurred while producing response: %v", webhook, err)
+			continue
+		}
+
 		response = append(response, *respWebhook)
 	}
 	apiContext.Write(&model.WebhookCollection{Data: response})
@@ -200,12 +210,18 @@ func (rh *RouteHandler) GetWebhook(w http.ResponseWriter, r *http.Request) (int,
 		fmt.Printf("webhook : %v\n", webhook)
 		return 400, nil
 	}
-	config := model.ScaleService{}
-	err = mapstructure.Decode(webhook.Config, &config)
-	if err != nil {
-		return 500, err
+
+	driver := drivers.GetDriver(webhook.Driver)
+	if driver == nil {
+		return 500, fmt.Errorf("Can't find driver %v", webhook.Driver)
 	}
-	respWebhook := newWebhook(apiContext, webhook.Url, webhook.Links, webhook.Id, webhook.Driver, webhook.Name, config)
+
+	respWebhook, err := newWebhook(apiContext, webhook.Url, webhook.Links, webhook.Id, webhook.Driver, webhook.Name,
+		webhook.Config, driver)
+	if err != nil {
+		return 500, errors.Wrap(err, "Unable to create webhook response")
+	}
+
 	apiContext.WriteResource(respWebhook)
 	return 200, nil
 }
@@ -271,4 +287,19 @@ func getDriverConfig(wh *model.Webhook) interface{} {
 
 func getDriverConfigFieldName(driver string) string {
 	return strings.Title(driver) + "Config"
+}
+
+func newWebhook(context *api.ApiContext, url string, links map[string]string, id string, driverName string, name string, driverConfig interface{}, driver drivers.WebhookDriver) (*model.Webhook, error) {
+	webhook := &model.Webhook{
+		Resource: v1client.Resource{
+			Id:    id,
+			Type:  "webhook",
+			Links: links,
+		},
+		URL:    url,
+		Driver: driverName,
+		Name:   name,
+	}
+	driver.ConvertToConfigAndSetOnWebhook(driverConfig, webhook)
+	return webhook, nil
 }

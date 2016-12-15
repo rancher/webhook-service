@@ -81,14 +81,20 @@ func (s *ScaleServiceDriver) Execute(conf interface{}, apiClient client.RancherC
 	return http.StatusOK, nil
 }
 
-func (s *ScaleServiceDriver) ConvertToConfigAndSetOnWebhook(configMap map[string]interface{}, webhook *model.Webhook) error {
-	config := model.ScaleService{}
-	err := mapstructure.Decode(configMap, &config)
-	if err != nil {
-		return err
+func (s *ScaleServiceDriver) ConvertToConfigAndSetOnWebhook(conf interface{}, webhook *model.Webhook) error {
+	if scaleConfig, ok := conf.(model.ScaleService); ok {
+		webhook.ScaleServiceConfig = scaleConfig
+		return nil
+	} else if configMap, ok := conf.(map[string]interface{}); ok {
+		config := model.ScaleService{}
+		err := mapstructure.Decode(configMap, &config)
+		if err != nil {
+			return err
+		}
+		webhook.ScaleServiceConfig = config
+		return nil
 	}
-	webhook.ScaleServiceConfig = config
-	return nil
+	return fmt.Errorf("Can't convert config %v", conf)
 }
 
 func (s *ScaleServiceDriver) GetSchema() interface{} {

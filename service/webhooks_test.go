@@ -76,6 +76,10 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if wh.Name != "wh-name" || wh.Driver != "scaleService" || wh.Id != "1" || wh.URL == "" || wh.ScaleServiceConfig.ServiceID != "id" ||
+		wh.ScaleServiceConfig.ScaleAction != "up" || wh.ScaleServiceConfig.ScaleChange != 1 {
+		t.Fatalf("Unexpected webhook: %#v", wh)
+	}
 
 	// Test getting the created webhook by id
 	byID := constructURL + "/1"
@@ -171,14 +175,9 @@ func (s *MockDriver) GetSchema() interface{} {
 	return model.ScaleService{}
 }
 
-func (s *MockDriver) ConvertToConfigAndSetOnWebhook(configMap map[string]interface{}, webhook *model.Webhook) error {
-	config := model.ScaleService{}
-	err := mapstructure.Decode(configMap, &config)
-	if err != nil {
-		return err
-	}
-	webhook.ScaleServiceConfig = config
-	return nil
+func (s *MockDriver) ConvertToConfigAndSetOnWebhook(conf interface{}, webhook *model.Webhook) error {
+	ss := &drivers.ScaleServiceDriver{}
+	return ss.ConvertToConfigAndSetOnWebhook(conf, webhook)
 }
 
 type MockRancherClientFactory struct {

@@ -1,18 +1,18 @@
 package model
 
 import (
-	"github.com/rancher/go-rancher/client"
+	v1client "github.com/rancher/go-rancher/client"
 )
 
 type ServerAPIError struct {
-	client.Resource
+	v1client.Resource
 	Code    int    `json:"statusCode"`
 	Status  string `json:"status"`
 	Message string `json:"message"`
 }
 
 type Webhook struct {
-	client.Resource
+	v1client.Resource
 	URL                string       `json:"url"`
 	Driver             string       `json:"driver"`
 	Name               string       `json:"name"`
@@ -20,6 +20,6 @@ type Webhook struct {
 }
 
 type WebhookCollection struct {
-	client.Collection
+	v1client.Collection
 	Data []Webhook `json:"data,omitempty"`
 }
