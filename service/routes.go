@@ -48,6 +48,8 @@ func NewRouter(privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey) *mux.Router
 	f := HandleError
 	r := RouteHandler{}
 	r.rcf = &ExecuteStruct{}
+	r.privateKey = privateKey
+	r.publicKey = publicKey
 	router.Methods("POST").Path("/v1-webhooks").Handler(f(schemas, r.ConstructPayload))
 	router.Methods("GET").Path("/v1-webhooks").Handler(f(schemas, r.ListWebhooks))
 	router.Methods("GET").Path("/v1-webhooks/{id}").Handler(f(schemas, r.GetWebhook))
@@ -106,7 +108,11 @@ func newWebhook(context *api.ApiContext, url string, links map[string]string, id
 	ConfigName := driver + "Config"
 	switch ConfigName {
 	case "scaleServiceConfig":
-		webhook.ScaleServiceConfig = userConfig.(drivers.ScaleService)
+		config, ok := userConfig.(drivers.ScaleService)
+		if !ok {
+			return webhook
+		}
+		webhook.ScaleServiceConfig = config
 	}
 
 	return webhook

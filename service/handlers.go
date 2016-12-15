@@ -1,17 +1,13 @@
 package service
 
 import (
+	"crypto/rsa"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
-	"reflect"
-	"strings"
-	"time"
-
 	"github.com/Sirupsen/logrus"
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
+	"github.com/mitchellh/mapstructure"
 	"github.com/pborman/uuid"
 	"github.com/pkg/errors"
 	"github.com/rancher/go-rancher/api"
@@ -19,6 +15,12 @@ import (
 	"github.com/rancher/rancher-auth-service/util"
 	"github.com/rancher/webhook-service/config"
 	"github.com/rancher/webhook-service/drivers"
+	"github.com/urfave/cli"
+	"io/ioutil"
+	"net/http"
+	"reflect"
+	"strings"
+	"time"
 )
 
 type RancherClientFactory interface {
@@ -49,7 +51,7 @@ func (rh *RouteHandler) ConstructPayload(w http.ResponseWriter, r *http.Request)
 	}
 
 	if wh.Driver == "" {
-		return 400, fmt.Errorf("Driver of not provided")
+		return 400, fmt.Errorf("Driver not provided")
 	}
 
 	driverConfig := getDriverConfig(wh)
@@ -170,14 +172,12 @@ func (rh *RouteHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) (in
 	webhooks, err := apiClient.Webhook.List(&client.ListOpts{})
 	response := []webhook{}
 	for _, webhook := range webhooks.Data {
-		driver := drivers.GetDriver(webhook.Driver)
-		userConfig := driver.GetSchema()
-		data, err := json.Marshal(webhook.Config)
+		config := getConfig(webhook.Driver)
+		err = mapstructure.Decode(webhook.Config, &config)
 		if err != nil {
 			return 500, err
 		}
-		json.Unmarshal(data, userConfig)
-		respWebhook := newWebhook(apiContext, webhook.Url, webhook.Links, webhook.Id, webhook.Driver, webhook.Name, userConfig)
+		respWebhook := newWebhook(apiContext, webhook.Url, webhook.Links, webhook.Id, webhook.Driver, webhook.Name, config)
 		response = append(response, *respWebhook)
 	}
 	apiContext.Write(&webhookCollection{Data: response})
@@ -200,18 +200,13 @@ func (rh *RouteHandler) GetWebhook(w http.ResponseWriter, r *http.Request) (int,
 	if err != nil {
 		return 500, err
 	}
-	if webhook.Removed == "Revoked" {
-		fmt.Printf("webhook : %v\n", webhook)
-		return 400, nil
-	}
-	driver := drivers.GetDriver(webhook.Driver)
-	userConfig := driver.GetSchema()
-	data, err := json.Marshal(webhook.Config)
+
+	config := getConfig(webhook.Driver)
+	err = mapstructure.Decode(webhook.Config, &config)
 	if err != nil {
 		return 500, err
 	}
-	json.Unmarshal(data, userConfig)
-	respWebhook := newWebhook(apiContext, webhook.Url, webhook.Links, webhook.Id, webhook.Driver, webhook.Name, userConfig)
+	respWebhook := newWebhook(apiContext, webhook.Url, webhook.Links, webhook.Id, webhook.Driver, webhook.Name, config)
 	apiContext.WriteResource(respWebhook)
 	return 200, nil
 }
@@ -292,4 +287,46 @@ func getDriverConfig(wh *webhook) interface{} {
 
 func getDriverConfigFieldName(driver string) string {
 	return strings.Title(driver) + "Config"
+}
+
+func getConfig(driver string) interface{} {
+	switch getDriverConfigFieldName(driver) {
+	case "ScaleServiceConfig":
+		return drivers.ScaleService{}
+	}
+	return nil
+}
+
+func GetKeys(c *cli.Context) (*rsa.PrivateKey, *rsa.PublicKey, error) {
+	var PrivateKey *rsa.PrivateKey
+	var PublicKey *rsa.PublicKey
+	privateKeyFile := c.GlobalString("rsa-private-key-file")
+	privateKeyFileContents := c.GlobalString("rsa-private-key-contents")
+
+	if privateKeyFile != "" && privateKeyFileContents != "" {
+		return nil, nil, fmt.Errorf("Can't specify both, file and contents, halting")
+	}
+	if privateKeyFile != "" {
+		PrivateKey = util.ParsePrivateKey(privateKeyFile)
+	} else if privateKeyFileContents != "" {
+		PrivateKey = util.ParsePrivateKeyContents(privateKeyFileContents)
+	} else {
+		return nil, nil, fmt.Errorf("Please provide either rsa-private-key-file or rsa-private-key-contents, halting")
+	}
+
+	publicKeyFile := c.GlobalString("rsa-public-key-file")
+	publicKeyFileContents := c.GlobalString("rsa-public-key-contents")
+
+	if publicKeyFile != "" && publicKeyFileContents != "" {
+		return nil, nil, fmt.Errorf("Can't specify both, file and contents, halting")
+	}
+	if publicKeyFile != "" {
+		PublicKey = util.ParsePublicKey(publicKeyFile)
+	} else if publicKeyFileContents != "" {
+		PublicKey = util.ParsePublicKeyContents(publicKeyFileContents)
+	} else {
+		return nil, nil, fmt.Errorf("Please provide either rsa-public-key-file or rsa-public-key-contents, halting")
+	}
+
+	return PrivateKey, PublicKey, nil
 }
