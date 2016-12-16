@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Sirupsen/logrus"
@@ -186,6 +187,48 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 		fmt.Printf("response : %v\n", response)
 		t.Fatal("Execute - Webhook not revoked after delete")
 	}
+}
+
+func TestMissingProjectIdHeader(t *testing.T) {
+	constructURL := fmt.Sprintf("%s/v1-webhooks", server.URL)
+	request, err := http.NewRequest("POST", constructURL, bytes.NewBuffer([]byte(`{}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler := HandleError(schemas, r.ConstructPayload)
+	handler.ServeHTTP(response, request)
+	if response.Code != 400 {
+		t.Fatalf("Expected 400 response code because of missing X-API-Project-Id header, got: %v", response.Code)
+	}
+	resp, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	respMessage := string(resp)
+	strings.Contains(respMessage, "X-API-Project-Id")
+}
+
+func TestMissingContentTypeHeader(t *testing.T) {
+	constructURL := fmt.Sprintf("%s/v1-webhooks", server.URL)
+	request, err := http.NewRequest("POST", constructURL, bytes.NewBuffer([]byte(`{}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("X-API-Project-Id", "1a1")
+	response := httptest.NewRecorder()
+	handler := HandleError(schemas, r.ConstructPayload)
+	handler.ServeHTTP(response, request)
+	if response.Code != 400 {
+		t.Fatalf("Expected 400 response code because of missing Content-Type header, got: %v", response.Code)
+	}
+	resp, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	respMessage := string(resp)
+	strings.Contains(respMessage, "application/json")
 }
 
 type MockDriver struct {
