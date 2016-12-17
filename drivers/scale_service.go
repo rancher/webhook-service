@@ -28,7 +28,7 @@ func (s *ScaleServiceDriver) ValidatePayload(conf interface{}, apiClient client.
 	}
 
 	if config.ScaleChange <= 0 {
-		return http.StatusBadRequest, fmt.Errorf("Invalice amount: %v", config.ScaleChange)
+		return http.StatusBadRequest, fmt.Errorf("Invalid amount: %v", config.ScaleChange)
 	}
 
 	if config.ServiceID == "" {

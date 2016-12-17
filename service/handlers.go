@@ -30,13 +30,18 @@ func (rh *RouteHandler) ConstructPayload(w http.ResponseWriter, r *http.Request)
 		return 500, err
 	}
 
-	if err := json.Unmarshal(bytes, &wh); err != nil {
-		return 400, errors.Wrap(err, "Bad request body")
+	contentType := r.Header.Get("Content-Type")
+	if contentType != "application/json" {
+		return 400, fmt.Errorf("Content-Type must be supplied as header. Only application/json is supported")
 	}
 
-	projectID := r.Header.Get("X-API-Project-Id")
-	if projectID == "" {
-		return 500, fmt.Errorf("Project ID not obtained from cattle")
+	projectID, errCode, err := getProjectIDFromHeader(r)
+	if err != nil {
+		return errCode, err
+	}
+
+	if err := json.Unmarshal(bytes, &wh); err != nil {
+		return 400, errors.Wrap(err, "Bad request body")
 	}
 
 	if wh.Name == "" {
@@ -166,9 +171,9 @@ func (rh *RouteHandler) Execute(w http.ResponseWriter, r *http.Request) (int, er
 
 func (rh *RouteHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) (int, error) {
 	apiContext := api.GetApiContext(r)
-	projectID := r.Header.Get("X-API-Project-Id")
-	if projectID == "" {
-		return 400, fmt.Errorf("Project ID not obtained from cattle")
+	projectID, errCode, err := getProjectIDFromHeader(r)
+	if err != nil {
+		return errCode, err
 	}
 	apiClient, err := rh.ClientFactory.GetClient(projectID)
 	if err != nil {
@@ -202,9 +207,9 @@ func (rh *RouteHandler) GetWebhook(w http.ResponseWriter, r *http.Request) (int,
 	webhookID := vars["id"]
 	logrus.Infof("Getting webhook %v", webhookID)
 
-	projectID := r.Header.Get("X-API-Project-Id")
-	if projectID == "" {
-		return 400, fmt.Errorf("Project ID not obtained from cattle")
+	projectID, errCode, err := getProjectIDFromHeader(r)
+	if err != nil {
+		return errCode, err
 	}
 	apiClient, err := rh.ClientFactory.GetClient(projectID)
 	if err != nil {
@@ -238,10 +243,12 @@ func (rh *RouteHandler) GetWebhook(w http.ResponseWriter, r *http.Request) (int,
 func (rh *RouteHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) (int, error) {
 	vars := mux.Vars(r)
 	webhookID := vars["id"]
-	projectID := r.Header.Get("X-API-Project-Id")
-	if projectID == "" {
-		return 400, fmt.Errorf("Project ID not obtained from cattle")
+
+	projectID, errCode, err := getProjectIDFromHeader(r)
+	if err != nil {
+		return errCode, err
 	}
+
 	apiClient, err := rh.ClientFactory.GetClient(projectID)
 	if err != nil {
 		return 500, err
@@ -260,6 +267,15 @@ func (rh *RouteHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) (i
 		return 500, err
 	}
 	return 200, nil
+}
+
+func getProjectIDFromHeader(r *http.Request) (string, int, error) {
+	projectID := r.Header.Get("X-API-Project-Id")
+	if projectID == "" {
+		return "", 400, fmt.Errorf("Project id must be supplied in X-API-Project-Id request header")
+	}
+
+	return projectID, 0, nil
 }
 
 func saveWebhook(uuid string, name string, driver string, url string, input interface{}, apiClient client.RancherClient) (*client.Webhook, error) {
