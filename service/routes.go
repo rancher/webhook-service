@@ -47,11 +47,11 @@ func NewRouter(r *RouteHandler) *mux.Router {
 	f := HandleError
 	router.Methods("GET").Path("/v1-webhooks/schemas").Handler(api.SchemasHandler(schemas))
 	router.Methods("GET").Path("/v1-webhooks/schemas/{id}").Handler(api.SchemaHandler(schemas))
-	router.Methods("POST").Path("/v1-webhooks").Handler(f(schemas, r.ConstructPayload))
-	router.Methods("GET").Path("/v1-webhooks").Handler(f(schemas, r.ListWebhooks))
-	router.Methods("GET").Path("/v1-webhooks/{id}").Handler(f(schemas, r.GetWebhook))
-	router.Methods("DELETE").Path("/v1-webhooks/{id}").Handler(f(schemas, r.DeleteWebhook))
-	router.Methods("POST").Path("/v1-webhooks-receiver").Handler(f(schemas, r.Execute))
+	router.Methods("POST").Path("/v1-webhooks/receivers").Handler(f(schemas, r.ConstructPayload))
+	router.Methods("GET").Path("/v1-webhooks/receivers").Handler(f(schemas, r.ListWebhooks))
+	router.Methods("GET").Path("/v1-webhooks/receivers/{id}").Handler(f(schemas, r.GetWebhook))
+	router.Methods("DELETE").Path("/v1-webhooks/receivers/{id}").Handler(f(schemas, r.DeleteWebhook))
+	router.Methods("POST").Path("/v1-webhooks/endpoint").Handler(f(schemas, r.Execute))
 
 	return router
 }
@@ -59,7 +59,7 @@ func NewRouter(r *RouteHandler) *mux.Router {
 func driverSchemas() *v1client.Schemas {
 	schemas := &v1client.Schemas{}
 
-	webhook := schemas.AddType("webhook", model.Webhook{})
+	webhook := schemas.AddType("webhookReceiver", model.Webhook{})
 	for key, value := range drivers.Drivers {
 		webhookField := key + "Config"
 		if field, ok := webhook.ResourceFields[webhookField]; ok {
