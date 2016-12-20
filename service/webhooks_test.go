@@ -41,8 +41,8 @@ func init() {
 		PublicKey:  publicKey,
 	}
 
-	mockWebhook := &mockWebhook{
-		created: map[string]*client.Webhook{},
+	mockWebhook := &mockGenericObject{
+		created: map[string]*client.GenericObject{},
 	}
 	r.ClientFactory = &MockRancherClientFactory{
 		mw: mockWebhook,
@@ -53,7 +53,7 @@ func init() {
 
 func TestWebhookCreateAndExecute(t *testing.T) {
 	// Test creating a webhook
-	constructURL := fmt.Sprintf("%s/v1-webhooks", server.URL)
+	constructURL := fmt.Sprintf("%s/v1-webhooks/receivers", server.URL)
 	jsonStr := []byte(`{"driver":"scaleService","name":"wh-name",
 		"scaleServiceConfig": {"serviceId": "id", "amount": 1, "action": "up"}}`)
 	request, err := http.NewRequest("POST", constructURL, bytes.NewBuffer(jsonStr))
@@ -290,24 +290,24 @@ func (s *MockDriver) ConvertToConfigAndSetOnWebhook(conf interface{}, webhook *m
 }
 
 type MockRancherClientFactory struct {
-	mw *mockWebhook
+	mw *mockGenericObject
 }
 
 func (e *MockRancherClientFactory) GetClient(projectID string) (client.RancherClient, error) {
 	logrus.Infof("RancherClientFactory GetClient")
 
 	mockClient := &client.RancherClient{
-		Webhook: e.mw,
+		GenericObject: e.mw,
 	}
 	return *mockClient, nil
 }
 
-type mockWebhook struct {
-	client.WebhookOperations
-	created map[string]*client.Webhook
+type mockGenericObject struct {
+	client.GenericObjectOperations
+	created map[string]*client.GenericObject
 }
 
-func (m *mockWebhook) Create(webhook *client.Webhook) (*client.Webhook, error) {
+func (m *mockGenericObject) Create(webhook *client.GenericObject) (*client.GenericObject, error) {
 	webhook.Links = make(map[string]string)
 	webhook.Links["self"] = "self"
 	webhook.Id = "1"
@@ -315,22 +315,23 @@ func (m *mockWebhook) Create(webhook *client.Webhook) (*client.Webhook, error) {
 	return webhook, nil
 }
 
-func (m *mockWebhook) List(opts *client.ListOpts) (*client.WebhookCollection, error) {
-	webhooks := []client.Webhook{}
+func (m *mockGenericObject) List(opts *client.ListOpts) (*client.GenericObjectCollection, error) {
+	webhooks := []client.GenericObject{}
 	for _, wh := range m.created {
 		webhooks = append(webhooks, *wh)
 	}
-	return &client.WebhookCollection{Data: webhooks}, nil
+	return &client.GenericObjectCollection{Data: webhooks}, nil
 }
 
-func (m *mockWebhook) ById(id string) (*client.Webhook, error) {
+func (m *mockGenericObject) ById(id string) (*client.GenericObject, error) {
+	fmt.Printf("%v %#v\n\n", id, m.created)
 	if wh, ok := m.created[id]; ok {
 		return wh, nil
 	}
 	return nil, fmt.Errorf("Doesn't exist")
 }
 
-func (m *mockWebhook) Delete(container *client.Webhook) error {
+func (m *mockGenericObject) Delete(container *client.GenericObject) error {
 	delete(m.created, container.Id)
 	return nil
 }

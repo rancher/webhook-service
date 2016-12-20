@@ -85,7 +85,7 @@ func (rh *RouteHandler) ConstructPayload(w http.ResponseWriter, r *http.Request)
 	}
 
 	url := baseURL(r)
-	url = url + "/v1-webhooks-receiver?token="
+	url = url + "/v1-webhooks/endpoint?token="
 	jwt = url + jwt
 
 	//saveWebhook needs only user fields
@@ -95,8 +95,8 @@ func (rh *RouteHandler) ConstructPayload(w http.ResponseWriter, r *http.Request)
 	}
 
 	//needs only user fields
-	webhook.Links["self"] = baseURL(r) + r.URL.String() + "/" + webhook.Id
-	whResponse, err := newWebhook(apiContext, jwt, webhook.Links, webhook.Id, wh.Driver, wh.Name, driverConfig, driver,
+	selfLink := baseURL(r) + r.URL.String() + "/" + webhook.Id
+	whResponse, err := newWebhook(apiContext, jwt, selfLink, webhook.Id, wh.Driver, wh.Name, driverConfig, driver,
 		webhook.State)
 	if err != nil {
 		return 500, errors.Wrap(err, "Unable to create webhook response")
@@ -179,19 +179,25 @@ func (rh *RouteHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) (in
 	if err != nil {
 		return 500, err
 	}
-	webhooks, err := apiClient.Webhook.List(&client.ListOpts{})
+	objs, err := apiClient.GenericObject.List(&client.ListOpts{})
 	response := []model.Webhook{}
-	for _, webhook := range webhooks.Data {
+	for _, obj := range objs.Data {
+		webhook, err := rh.convertToWebhookGenericObject(obj)
+		if err != nil {
+			logrus.Warnf("Skipping webhook %#v because: %v", obj, err)
+			continue
+		}
+
 		driver := drivers.GetDriver(webhook.Driver)
 		if driver == nil {
 			logrus.Warnf("Skipping webhook %#v because driver cannot be located", webhook)
 			continue
 		}
-		webhook.Links["self"] = baseURL(r) + r.URL.String() + "/" + webhook.Id
-		respWebhook, err := newWebhook(apiContext, webhook.Url, webhook.Links, webhook.Id, webhook.Driver, webhook.Name,
+		selfLink := baseURL(r) + r.URL.String() + "/" + webhook.ID
+		respWebhook, err := newWebhook(apiContext, webhook.URL, selfLink, webhook.ID, webhook.Driver, webhook.Name,
 			webhook.Config, driver, webhook.State)
 		if err != nil {
-			logrus.Warnf("Skipping webhook %#v an error ocurred while producing response: %v", webhook, err)
+			logrus.Warnf("Skipping webhook %#v an error ocurred while producing response: %v", obj, err)
 			continue
 		}
 
@@ -215,13 +221,18 @@ func (rh *RouteHandler) GetWebhook(w http.ResponseWriter, r *http.Request) (int,
 	if err != nil {
 		return 500, err
 	}
-	webhook, err := apiClient.Webhook.ById(webhookID)
+	obj, err := apiClient.GenericObject.ById(webhookID)
 	if err != nil {
 		return 500, err
 	}
 
-	if webhook == nil {
+	if obj == nil {
 		return 404, fmt.Errorf("Webhook not found")
+	}
+
+	webhook, err := rh.convertToWebhookGenericObject(*obj)
+	if err != nil {
+		return 500, err
 	}
 
 	driver := drivers.GetDriver(webhook.Driver)
@@ -229,8 +240,8 @@ func (rh *RouteHandler) GetWebhook(w http.ResponseWriter, r *http.Request) (int,
 		return 500, fmt.Errorf("Can't find driver %v", webhook.Driver)
 	}
 
-	webhook.Links["self"] = baseURL(r) + r.URL.String()
-	respWebhook, err := newWebhook(apiContext, webhook.Url, webhook.Links, webhook.Id, webhook.Driver, webhook.Name,
+	selfLink := baseURL(r) + r.URL.String()
+	respWebhook, err := newWebhook(apiContext, webhook.URL, selfLink, webhook.ID, webhook.Driver, webhook.Name,
 		webhook.Config, driver, webhook.State)
 	if err != nil {
 		return 500, errors.Wrap(err, "Unable to create webhook response")
@@ -253,16 +264,16 @@ func (rh *RouteHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) (i
 	if err != nil {
 		return 500, err
 	}
-	webhook, err := apiClient.Webhook.ById(webhookID)
+	obj, err := apiClient.GenericObject.ById(webhookID)
 	if err != nil {
 		return 500, err
 	}
 
-	if webhook == nil {
+	if obj == nil {
 		return 404, fmt.Errorf("Webhook not found")
 	}
 
-	err = apiClient.Webhook.Delete(webhook)
+	err = apiClient.GenericObject.Delete(obj)
 	if err != nil {
 		return 500, err
 	}
@@ -278,25 +289,28 @@ func getProjectIDFromHeader(r *http.Request) (string, int, error) {
 	return projectID, 0, nil
 }
 
-func saveWebhook(uuid string, name string, driver string, url string, input interface{}, apiClient client.RancherClient) (*client.Webhook, error) {
-	webhook, err := apiClient.Webhook.Create(&client.Webhook{
-		Name:   name,
-		Key:    uuid,
-		Url:    url,
-		Config: input,
-		Driver: driver,
+func saveWebhook(uuid string, name string, driver string, url string, config interface{}, apiClient client.RancherClient) (*client.GenericObject, error) {
+	resourceData := map[string]interface{}{
+		"url":    url,
+		"driver": driver,
+		"config": config,
+	}
+	obj, err := apiClient.GenericObject.Create(&client.GenericObject{
+		Name:         name,
+		Key:          uuid,
+		ResourceData: resourceData,
 	})
 
 	if err != nil {
-		return &client.Webhook{}, fmt.Errorf("Failed to create webhook : %v", err)
+		return &client.GenericObject{}, fmt.Errorf("Failed to create webhook : %v", err)
 	}
-	return webhook, nil
+	return obj, nil
 }
 
 func validateWebhook(uuid string, apiClient client.RancherClient) (int, error) {
 	filters := make(map[string]interface{})
 	filters["key"] = uuid
-	webhookCollection, err := apiClient.Webhook.List(&client.ListOpts{
+	webhookCollection, err := apiClient.GenericObject.List(&client.ListOpts{
 		Filters: filters,
 	})
 	if err != nil {
@@ -318,13 +332,13 @@ func getDriverConfigFieldName(driver string) string {
 	return strings.Title(driver) + "Config"
 }
 
-func newWebhook(context *api.ApiContext, url string, links map[string]string, id string, driverName string, name string,
+func newWebhook(context *api.ApiContext, url string, selfLink string, id string, driverName string, name string,
 	driverConfig interface{}, driver drivers.WebhookDriver, state string) (*model.Webhook, error) {
 	webhook := &model.Webhook{
 		Resource: v1client.Resource{
 			Id:    id,
-			Type:  "webhook",
-			Links: links,
+			Type:  "webhookReceiver",
+			Links: map[string]string{"self": selfLink},
 		},
 		URL:    url,
 		Driver: driverName,
@@ -333,4 +347,43 @@ func newWebhook(context *api.ApiContext, url string, links map[string]string, id
 	}
 	driver.ConvertToConfigAndSetOnWebhook(driverConfig, webhook)
 	return webhook, nil
+}
+
+type webhookGenericObject struct {
+	ID     string
+	Name   string
+	State  string
+	Links  map[string]string
+	Driver string
+	URL    string
+	Key    string
+	Config interface{}
+}
+
+func (rh *RouteHandler) convertToWebhookGenericObject(genericObject client.GenericObject) (webhookGenericObject, error) {
+	d, ok := genericObject.ResourceData["driver"].(string)
+	if !ok {
+		return webhookGenericObject{}, fmt.Errorf("Couldn't read webhook data. Bad driver")
+	}
+
+	url, ok := genericObject.ResourceData["url"].(string)
+	if !ok {
+		return webhookGenericObject{}, fmt.Errorf("Couldn't read webhook data. Bad url")
+	}
+
+	config, ok := genericObject.ResourceData["config"]
+	if !ok {
+		return webhookGenericObject{}, fmt.Errorf("Couldn't read webhook data. Bad config on resource")
+	}
+
+	return webhookGenericObject{
+		Name:   genericObject.Name,
+		ID:     genericObject.Id,
+		State:  genericObject.State,
+		Links:  genericObject.Links,
+		Driver: d,
+		URL:    url,
+		Key:    genericObject.Key,
+		Config: config,
+	}, nil
 }
