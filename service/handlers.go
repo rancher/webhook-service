@@ -35,7 +35,7 @@ func (rh *RouteHandler) ConstructPayload(w http.ResponseWriter, r *http.Request)
 		return 400, fmt.Errorf("Content-Type must be supplied as header. Only application/json is supported")
 	}
 
-	projectID, errCode, err := getProjectIDFromHeader(r)
+	projectID, errCode, err := getProjectID(r)
 	if err != nil {
 		return errCode, err
 	}
@@ -171,7 +171,7 @@ func (rh *RouteHandler) Execute(w http.ResponseWriter, r *http.Request) (int, er
 
 func (rh *RouteHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) (int, error) {
 	apiContext := api.GetApiContext(r)
-	projectID, errCode, err := getProjectIDFromHeader(r)
+	projectID, errCode, err := getProjectID(r)
 	if err != nil {
 		return errCode, err
 	}
@@ -213,7 +213,7 @@ func (rh *RouteHandler) GetWebhook(w http.ResponseWriter, r *http.Request) (int,
 	webhookID := vars["id"]
 	logrus.Infof("Getting webhook %v", webhookID)
 
-	projectID, errCode, err := getProjectIDFromHeader(r)
+	projectID, errCode, err := getProjectID(r)
 	if err != nil {
 		return errCode, err
 	}
@@ -255,7 +255,7 @@ func (rh *RouteHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) (i
 	vars := mux.Vars(r)
 	webhookID := vars["id"]
 
-	projectID, errCode, err := getProjectIDFromHeader(r)
+	projectID, errCode, err := getProjectID(r)
 	if err != nil {
 		return errCode, err
 	}
@@ -280,10 +280,10 @@ func (rh *RouteHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) (i
 	return 200, nil
 }
 
-func getProjectIDFromHeader(r *http.Request) (string, int, error) {
-	projectID := r.Header.Get("X-API-Project-Id")
+func getProjectID(r *http.Request) (string, int, error) {
+	projectID := r.URL.Query().Get("projectId")
 	if projectID == "" {
-		return "", 400, fmt.Errorf("Project id must be supplied in X-API-Project-Id request header")
+		return "", 400, fmt.Errorf("projectId must be supplied as query parameter")
 	}
 
 	return projectID, 0, nil

@@ -53,7 +53,7 @@ func init() {
 
 func TestWebhookCreateAndExecute(t *testing.T) {
 	// Test creating a webhook
-	constructURL := fmt.Sprintf("%s/v1-webhooks/receivers", server.URL)
+	constructURL := fmt.Sprintf("%s/v1-webhooks/receivers?projectId=1a1", server.URL)
 	jsonStr := []byte(`{"driver":"scaleService","name":"wh-name",
 		"scaleServiceConfig": {"serviceId": "id", "amount": 1, "action": "up"}}`)
 	request, err := http.NewRequest("POST", constructURL, bytes.NewBuffer(jsonStr))
@@ -61,7 +61,6 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 		t.Fatal(err)
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-API-Project-Id", "1a1")
 	response := httptest.NewRecorder()
 	handler := HandleError(schemas, r.ConstructPayload)
 	handler.ServeHTTP(response, request)
@@ -83,13 +82,12 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 	}
 
 	// Test getting the created webhook by id
-	byID := constructURL + "/1"
+	byID := fmt.Sprintf("%s/v1-webhooks/receivers/1?projectId=1a1", server.URL)
 	request, err = http.NewRequest("GET", byID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-API-Project-Id", "1a1")
 	response = httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	if response.Code != 200 {
@@ -128,7 +126,6 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 		t.Fatal(err)
 	}
 	requestList.Header.Set("Content-Type", "application/json")
-	requestList.Header.Set("X-API-Project-Id", "1a1")
 	response = httptest.NewRecorder()
 	router.ServeHTTP(response, requestList)
 	if response.Code != 200 {
@@ -153,7 +150,6 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 		t.Fatal(err)
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-API-Project-Id", "1a1")
 	response = httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	if response.Code != 200 {
@@ -200,23 +196,22 @@ func TestMissingProjectIdHeader(t *testing.T) {
 	handler := HandleError(schemas, r.ConstructPayload)
 	handler.ServeHTTP(response, request)
 	if response.Code != 400 {
-		t.Fatalf("Expected 400 response code because of missing X-API-Project-Id header, got: %v", response.Code)
+		t.Fatalf("Expected 400 response code because of missing projectId, got: %v", response.Code)
 	}
 	resp, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
 	respMessage := string(resp)
-	strings.Contains(respMessage, "X-API-Project-Id")
+	strings.Contains(respMessage, "projectId")
 }
 
 func TestMissingContentTypeHeader(t *testing.T) {
-	constructURL := fmt.Sprintf("%s/v1-webhooks", server.URL)
+	constructURL := fmt.Sprintf("%s/v1-webhooks?projectId=1a1", server.URL)
 	request, err := http.NewRequest("POST", constructURL, bytes.NewBuffer([]byte(`{}`)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.Header.Set("X-API-Project-Id", "1a1")
 	response := httptest.NewRecorder()
 	handler := HandleError(schemas, r.ConstructPayload)
 	handler.ServeHTTP(response, request)
