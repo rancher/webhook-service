@@ -31,6 +31,8 @@ func HandleError(s *v1client.Schemas, t func(http.ResponseWriter, *http.Request)
 			if writeErr != nil {
 				logrus.Errorf("Failed to write err: %v", err)
 			}
+		} else {
+			rw.WriteHeader(code)
 		}
 	}))
 }
@@ -76,17 +78,37 @@ func NewRouter(r *RouteHandler) *mux.Router {
 func driverSchemas() *v1client.Schemas {
 	schemas := &v1client.Schemas{}
 	webhook := schemas.AddType("receiver", model.Webhook{})
+	webhook.CollectionMethods = []string{"GET", "POST"}
+	webhook.ResourceMethods = []string{"GET", "DELETE"}
+
+	f := webhook.ResourceFields["name"]
+	f.Create = true
+	webhook.ResourceFields["name"] = f
+
+	driverOptions := []string{}
 	for key, value := range drivers.Drivers {
 		webhookField := key + "Config"
 		if field, ok := webhook.ResourceFields[webhookField]; ok {
+			driverOptions = append(driverOptions, key)
 			field.Type = key
+			field.Create = true
 			webhook.ResourceFields[webhookField] = field
 			driverConfig := schemas.AddType(key, value.GetSchema())
 			driverConfig.CollectionMethods = []string{}
+			for k, f := range driverConfig.ResourceFields {
+				f.Create = true
+				driverConfig.ResourceFields[k] = f
+			}
 		} else {
 			logrus.Warnf("Skipping configured driver %v because it doesn't have a field on webhook", key)
 		}
 	}
+
+	f = webhook.ResourceFields["driver"]
+	f.Create = true
+	f.Type = "enum"
+	f.Options = driverOptions
+	webhook.ResourceFields["driver"] = f
 
 	schemas.AddType("apiVersion", v1client.Resource{})
 	schemas.AddType("schema", v1client.Schema{})

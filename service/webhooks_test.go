@@ -166,7 +166,7 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 	request.Header.Set("Content-Type", "application/json")
 	response = httptest.NewRecorder()
 	router.ServeHTTP(response, request)
-	if response.Code != 200 {
+	if response.Code != 204 {
 		t.Fatalf("StatusCode %d means delete failed", response.Code)
 	}
 

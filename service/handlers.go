@@ -51,8 +51,10 @@ func (rh *RouteHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) (in
 
 	collectionURL := apiContext.UrlBuilder.Current() + "?projectId=" + projectID
 	apiContext.Write(&model.WebhookCollection{
-		Collection: v1client.Collection{Links: map[string]string{"self": collectionURL}},
-		Data:       response})
+		Collection: v1client.Collection{
+			ResourceType: "receiver",
+			Links:        map[string]string{"self": collectionURL}},
+		Data: response})
 	return 200, nil
 }
 
@@ -125,7 +127,7 @@ func (rh *RouteHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) (i
 	if err != nil {
 		return 500, err
 	}
-	return 200, nil
+	return 204, nil
 }
 
 func getProjectID(r *http.Request) (string, int, error) {
