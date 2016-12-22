@@ -43,23 +43,39 @@ type RouteHandler struct {
 
 func NewRouter(r *RouteHandler) *mux.Router {
 	schemas = driverSchemas()
-	router := mux.NewRouter().StrictSlash(true)
+	router := mux.NewRouter().StrictSlash(false)
 	f := HandleError
+
+	router.Methods("GET").Path("/v1-webhooks").Handler(VersionHandler(schemas))
+	router.Methods("GET").Path("/v1-webhooks/").Handler(VersionHandler(schemas))
+
+	router.Methods("GET").Path("/v1-webhooks/schemas/").Handler(api.SchemasHandler(schemas))
 	router.Methods("GET").Path("/v1-webhooks/schemas").Handler(api.SchemasHandler(schemas))
+
 	router.Methods("GET").Path("/v1-webhooks/schemas/{id}").Handler(api.SchemaHandler(schemas))
+	router.Methods("GET").Path("/v1-webhooks/schemas/{id}/").Handler(api.SchemaHandler(schemas))
+
 	router.Methods("POST").Path("/v1-webhooks/receivers").Handler(f(schemas, r.ConstructPayload))
+	router.Methods("POST").Path("/v1-webhooks/receivers/").Handler(f(schemas, r.ConstructPayload))
+
 	router.Methods("GET").Path("/v1-webhooks/receivers").Handler(f(schemas, r.ListWebhooks))
+	router.Methods("GET").Path("/v1-webhooks/receivers/").Handler(f(schemas, r.ListWebhooks))
+
 	router.Methods("GET").Path("/v1-webhooks/receivers/{id}").Handler(f(schemas, r.GetWebhook))
+	router.Methods("GET").Path("/v1-webhooks/receivers/{id}/").Handler(f(schemas, r.GetWebhook))
+
 	router.Methods("DELETE").Path("/v1-webhooks/receivers/{id}").Handler(f(schemas, r.DeleteWebhook))
+	router.Methods("DELETE").Path("/v1-webhooks/receivers/{id}/").Handler(f(schemas, r.DeleteWebhook))
+
 	router.Methods("POST").Path("/v1-webhooks/endpoint").Handler(f(schemas, r.Execute))
+	router.Methods("POST").Path("/v1-webhooks/endpoint/").Handler(f(schemas, r.Execute))
 
 	return router
 }
 
 func driverSchemas() *v1client.Schemas {
 	schemas := &v1client.Schemas{}
-
-	webhook := schemas.AddType("webhookReceiver", model.Webhook{})
+	webhook := schemas.AddType("receiver", model.Webhook{})
 	for key, value := range drivers.Drivers {
 		webhookField := key + "Config"
 		if field, ok := webhook.ResourceFields[webhookField]; ok {

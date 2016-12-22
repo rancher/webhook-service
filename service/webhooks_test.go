@@ -80,6 +80,9 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 		wh.ScaleServiceConfig.ScaleAction != "up" || wh.ScaleServiceConfig.ScaleChange != 1 {
 		t.Fatalf("Unexpected webhook: %#v", wh)
 	}
+	if !strings.HasSuffix(wh.Links["self"], "/v1-webhooks/receivers/1?projectId=1a1") {
+		t.Fatalf("Bad self URL: %v", wh.Links["self"])
+	}
 
 	// Test getting the created webhook by id
 	byID := fmt.Sprintf("%s/v1-webhooks/receivers/1?projectId=1a1", server.URL)
@@ -105,6 +108,9 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 	if wh.Name != "wh-name" || wh.Driver != "scaleService" || wh.Id != "1" || wh.URL == "" || wh.ScaleServiceConfig.ServiceID != "id" ||
 		wh.ScaleServiceConfig.ScaleAction != "up" || wh.ScaleServiceConfig.ScaleChange != 1 {
 		t.Fatalf("Unexpected webhook: %#v", wh)
+	}
+	if !strings.HasSuffix(wh.Links["self"], "/v1-webhooks/receivers/1?projectId=1a1") {
+		t.Fatalf("Bad self URL: %v", wh.Links["self"])
 	}
 
 	// Test executing the webhook
@@ -142,6 +148,14 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 	}
 	if len(whCollection.Data) != 1 {
 		t.Fatal("Added webhook not listed")
+	}
+	wh = &whCollection.Data[0]
+	if wh.Name != "wh-name" || wh.Driver != "scaleService" || wh.Id != "1" || wh.URL == "" || wh.ScaleServiceConfig.ServiceID != "id" ||
+		wh.ScaleServiceConfig.ScaleAction != "up" || wh.ScaleServiceConfig.ScaleChange != 1 {
+		t.Fatalf("Unexpected webhook: %#v", wh)
+	}
+	if !strings.HasSuffix(wh.Links["self"], "/v1-webhooks/receivers/1?projectId=1a1") {
+		t.Fatalf("Bad self URL: %v", wh.Links["self"])
 	}
 
 	// //Delete
