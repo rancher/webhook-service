@@ -66,6 +66,9 @@ func (s *ScaleServiceDriver) Execute(conf interface{}, apiClient client.RancherC
 	if scaleAction == "up" {
 		newScale = service.Scale + int64(scaleChange)
 	} else if scaleAction == "down" {
+		if service.Scale-int64(scaleChange) <= 0 {
+			return http.StatusBadRequest, fmt.Errorf("Cannot have negative scale")
+		}
 		newScale = service.Scale - int64(scaleChange)
 	} else {
 		return http.StatusBadRequest, fmt.Errorf("Scale action not provided")
