@@ -100,3 +100,24 @@ func (s *ScaleServiceDriver) ConvertToConfigAndSetOnWebhook(conf interface{}, we
 func (s *ScaleServiceDriver) GetSchema() interface{} {
 	return model.ScaleService{}
 }
+
+func (s *ScaleServiceDriver) CheckValidity(conf interface{}, apiClient client.RancherClient) error {
+	config := &model.ScaleService{}
+	err := mapstructure.Decode(conf, config)
+	if err != nil {
+		return errors.Wrap(err, "Couldn't unmarshal config")
+	}
+
+	serviceID := config.ServiceID
+
+	service, err := apiClient.Service.ById(serviceID)
+	if err != nil {
+		return errors.Wrap(err, "Error in getService")
+	}
+
+	if service == nil || service.Removed != "" {
+		return fmt.Errorf("Invalid service %v", config.ServiceID)
+	}
+
+	return nil
+}

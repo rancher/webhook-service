@@ -39,6 +39,16 @@ func (rh *RouteHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) (in
 			logrus.Warnf("Skipping webhook %#v because driver cannot be located", webhook)
 			continue
 		}
+
+		err = driver.CheckValidity(webhook.Config, apiClient)
+		if err != nil {
+			err = apiClient.GenericObject.Delete(&obj)
+			if err != nil {
+				return 500, err
+			}
+			continue
+		}
+
 		respWebhook, err := newWebhook(apiContext, webhook.URL, webhook.ID, webhook.Driver, webhook.Name,
 			webhook.Config, driver, webhook.State, r)
 		if err != nil {
