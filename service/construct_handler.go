@@ -64,7 +64,12 @@ func (rh *RouteHandler) ConstructPayload(w http.ResponseWriter, r *http.Request)
 		return 500, err
 	}
 
-	code, err := driver.ValidatePayload(driverConfig, apiClient)
+	code, err := rh.isUniqueName(wh.Name, projectID, apiClient)
+	if err != nil {
+		return code, err
+	}
+
+	code, err = driver.ValidatePayload(driverConfig, apiClient)
 	if err != nil {
 		return code, err
 	}
