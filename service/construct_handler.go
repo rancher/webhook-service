@@ -111,6 +111,7 @@ func saveWebhook(uuid string, name string, driver string, url string, config int
 		Name:         name,
 		Key:          uuid,
 		ResourceData: resourceData,
+		Kind:         "webhookReceiver",
 	})
 
 	if err != nil {

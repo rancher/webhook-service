@@ -25,24 +25,28 @@ func (rh *RouteHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) (in
 	if err != nil {
 		return 500, err
 	}
-	objs, err := apiClient.GenericObject.List(&client.ListOpts{})
+	filters := make(map[string]interface{})
+	filters["kind"] = "webhookReceiver"
+	objs, err := apiClient.GenericObject.List(&client.ListOpts{
+		Filters: filters,
+	})
 	response := []model.Webhook{}
 	for _, obj := range objs.Data {
 		webhook, err := rh.convertToWebhookGenericObject(obj)
 		if err != nil {
-			logrus.Warnf("Skipping webhook %#v because: %v", obj, err)
+			logrus.Warnf("Skipping webhook %s because: %v", obj.Id, err)
 			continue
 		}
 
 		driver := drivers.GetDriver(webhook.Driver)
 		if driver == nil {
-			logrus.Warnf("Skipping webhook %#v because driver cannot be located", webhook)
+			logrus.Warnf("Skipping webhook %s because driver cannot be located", webhook.ID)
 			continue
 		}
 		respWebhook, err := newWebhook(apiContext, webhook.URL, webhook.ID, webhook.Driver, webhook.Name,
 			webhook.Config, driver, webhook.State, r)
 		if err != nil {
-			logrus.Warnf("Skipping webhook %#v an error ocurred while producing response: %v", obj, err)
+			logrus.Warnf("Skipping webhook %s an error ocurred while producing response: %v", webhook.ID, err)
 			continue
 		}
 
