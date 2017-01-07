@@ -13,6 +13,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
 	"github.com/mitchellh/mapstructure"
+	v1client "github.com/rancher/go-rancher/client"
 	"github.com/rancher/go-rancher/v2"
 	"github.com/rancher/rancher-auth-service/util"
 	"github.com/rancher/webhook-service/drivers"
@@ -31,6 +32,8 @@ func init() {
 		ScaleAction: "up",
 		ScaleChange: 1,
 		ServiceID:   "id",
+		Min:         1,
+		Max:         4,
 	}
 	drivers.Drivers["scaleService"] = &MockDriver{expectedConfig: expected}
 
@@ -55,7 +58,7 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 	// Test creating a webhook
 	constructURL := fmt.Sprintf("%s/v1-webhooks/receivers?projectId=1a1", server.URL)
 	jsonStr := []byte(`{"driver":"scaleService","name":"wh-name",
-		"scaleServiceConfig": {"serviceId": "id", "amount": 1, "action": "up"}}`)
+		"scaleServiceConfig": {"serviceId": "id", "amount": 1, "action": "up", "min": 1, "max": 4}}`)
 	request, err := http.NewRequest("POST", constructURL, bytes.NewBuffer(jsonStr))
 	if err != nil {
 		t.Fatal(err)
@@ -77,7 +80,8 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 		t.Fatal(err)
 	}
 	if wh.Name != "wh-name" || wh.Driver != "scaleService" || wh.Id != "1" || wh.URL == "" || wh.ScaleServiceConfig.ServiceID != "id" ||
-		wh.ScaleServiceConfig.ScaleAction != "up" || wh.ScaleServiceConfig.ScaleChange != 1 {
+		wh.ScaleServiceConfig.ScaleAction != "up" || wh.ScaleServiceConfig.ScaleChange != 1 || wh.ScaleServiceConfig.Min != 1 ||
+		wh.ScaleServiceConfig.Max != 4 {
 		t.Fatalf("Unexpected webhook: %#v", wh)
 	}
 	if !strings.HasSuffix(wh.Links["self"], "/v1-webhooks/receivers/1?projectId=1a1") {
@@ -106,7 +110,8 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 		t.Fatal(err)
 	}
 	if wh.Name != "wh-name" || wh.Driver != "scaleService" || wh.Id != "1" || wh.URL == "" || wh.ScaleServiceConfig.ServiceID != "id" ||
-		wh.ScaleServiceConfig.ScaleAction != "up" || wh.ScaleServiceConfig.ScaleChange != 1 {
+		wh.ScaleServiceConfig.ScaleAction != "up" || wh.ScaleServiceConfig.ScaleChange != 1 || wh.ScaleServiceConfig.Min != 1 ||
+		wh.ScaleServiceConfig.Max != 4 {
 		t.Fatalf("Unexpected webhook: %#v", wh)
 	}
 	if !strings.HasSuffix(wh.Links["self"], "/v1-webhooks/receivers/1?projectId=1a1") {
@@ -151,7 +156,8 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 	}
 	wh = &whCollection.Data[0]
 	if wh.Name != "wh-name" || wh.Driver != "scaleService" || wh.Id != "1" || wh.URL == "" || wh.ScaleServiceConfig.ServiceID != "id" ||
-		wh.ScaleServiceConfig.ScaleAction != "up" || wh.ScaleServiceConfig.ScaleChange != 1 {
+		wh.ScaleServiceConfig.ScaleAction != "up" || wh.ScaleServiceConfig.ScaleChange != 1 || wh.ScaleServiceConfig.Min != 1 ||
+		wh.ScaleServiceConfig.Max != 4 {
 		t.Fatalf("Unexpected webhook: %#v", wh)
 	}
 	if !strings.HasSuffix(wh.Links["self"], "/v1-webhooks/receivers/1?projectId=1a1") {
@@ -196,6 +202,37 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 	if response.Code != 403 {
 		fmt.Printf("response : %v\n", response)
 		t.Fatal("Execute - Webhook not revoked after delete")
+	}
+}
+
+func TestWebhookCreateInvalidMinMax(t *testing.T) {
+	constructURL := fmt.Sprintf("%s/v1-webhooks/receivers?projectId=1a1", server.URL)
+	jsonStr := []byte(`{"driver":"scaleService","name":"wh-name",
+		"scaleServiceConfig": {"serviceId": "id", "amount": 1, "action": "up", "min": -1, "max": 4}}`)
+	request, err := http.NewRequest("POST", constructURL, bytes.NewBuffer(jsonStr))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler := HandleError(schemas, r.ConstructPayload)
+	handler.ServeHTTP(response, request)
+	if response.Code == 200 {
+		t.Fatalf("Invalid min")
+	}
+
+	jsonStr = []byte(`{"driver":"scaleService","name":"wh-name",
+		"scaleServiceConfig": {"serviceId": "id", "amount": 1, "action": "up", "min": 1, "max": -4}}`)
+	request, err = http.NewRequest("POST", constructURL, bytes.NewBuffer(jsonStr))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response = httptest.NewRecorder()
+	handler = HandleError(schemas, r.ConstructPayload)
+	handler.ServeHTTP(response, request)
+	if response.Code == 200 {
+		t.Fatalf("Invalid max")
 	}
 }
 
@@ -285,12 +322,24 @@ func (s *MockDriver) ValidatePayload(conf interface{}, apiClient client.RancherC
 		return 500, fmt.Errorf("ServiceChange. Expected %v, Actual %v", s.expectedConfig.ScaleChange, config.ScaleChange)
 	}
 
+	if config.Min != s.expectedConfig.Min {
+		return 500, fmt.Errorf("Min. Expected %v, Actual %v", s.expectedConfig.Min, config.Min)
+	}
+
+	if config.Max != s.expectedConfig.Max {
+		return 500, fmt.Errorf("Max. Expected %v, Actual %v", s.expectedConfig.Max, config.Max)
+	}
+
 	logrus.Infof("Validate payload of mock driver")
 	return 0, nil
 }
 
-func (s *MockDriver) GetSchema() interface{} {
+func (s *MockDriver) GetDriverConfigResource() interface{} {
 	return model.ScaleService{}
+}
+
+func (s *MockDriver) CustomizeSchema(schema *v1client.Schema) *v1client.Schema {
+	return schema
 }
 
 func (s *MockDriver) ConvertToConfigAndSetOnWebhook(conf interface{}, webhook *model.Webhook) error {
