@@ -201,3 +201,18 @@ func (rh *RouteHandler) convertToWebhookGenericObject(genericObject client.Gener
 		Config: config,
 	}, nil
 }
+
+func (rh *RouteHandler) isUniqueName(webhookName string, projectID string, apiClient client.RancherClient) (int, error) {
+	filters := make(map[string]interface{})
+	filters["name"] = webhookName
+	obj, err := apiClient.GenericObject.List(&client.ListOpts{
+		Filters: filters,
+	})
+	if err != nil {
+		return 500, err
+	}
+	if len(obj.Data) > 0 {
+		return 400, fmt.Errorf("Cannot have duplicate webhook name, webhook %s already exists", webhookName)
+	}
+	return 200, nil
+}

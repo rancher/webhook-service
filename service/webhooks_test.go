@@ -84,6 +84,14 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 		t.Fatalf("Bad self URL: %v", wh.Links["self"])
 	}
 
+	// Test creating webhook with same name
+	response = httptest.NewRecorder()
+	handler = HandleError(schemas, r.ConstructPayload)
+	handler.ServeHTTP(response, request)
+	if response.Code != 400 {
+		t.Fatalf("Duplicate name webhook creation should not be allowed")
+	}
+
 	// Test getting the created webhook by id
 	byID := fmt.Sprintf("%s/v1-webhooks/receivers/1?projectId=1a1", server.URL)
 	request, err = http.NewRequest("GET", byID, nil)
