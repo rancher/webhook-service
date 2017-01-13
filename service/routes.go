@@ -93,12 +93,13 @@ func driverSchemas() *v1client.Schemas {
 			field.Type = key
 			field.Create = true
 			webhook.ResourceFields[webhookField] = field
-			driverConfig := schemas.AddType(key, value.GetSchema())
+			driverConfig := schemas.AddType(key, value.GetDriverConfigResource())
 			driverConfig.CollectionMethods = []string{}
 			for k, f := range driverConfig.ResourceFields {
 				f.Create = true
 				driverConfig.ResourceFields[k] = f
 			}
+			driverConfig = value.CustomizeSchema(driverConfig)
 		} else {
 			logrus.Warnf("Skipping configured driver %v because it doesn't have a field on webhook", key)
 		}
