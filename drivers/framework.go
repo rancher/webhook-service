@@ -14,6 +14,7 @@ type WebhookDriver interface {
 	Execute(config interface{}, apiClient client.RancherClient) (int, error)
 	GetSchema() interface{}
 	ConvertToConfigAndSetOnWebhook(conf interface{}, webhook *model.Webhook) error
+	CheckValidity(config interface{}, apiClient client.RancherClient) error
 }
 
 //RegisterDrivers creates object of type driver for every request

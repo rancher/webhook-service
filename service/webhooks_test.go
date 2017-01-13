@@ -306,6 +306,10 @@ func (s *MockDriver) ConvertToConfigAndSetOnWebhook(conf interface{}, webhook *m
 	return ss.ConvertToConfigAndSetOnWebhook(conf, webhook)
 }
 
+func (s *MockDriver) CheckValidity(conf interface{}, apiClient client.RancherClient) error {
+	return nil
+}
+
 type MockRancherClientFactory struct {
 	mw *mockGenericObject
 }
