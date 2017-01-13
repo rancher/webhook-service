@@ -67,6 +67,10 @@ func (s *ScaleServiceDriver) Execute(conf interface{}, apiClient client.RancherC
 		return http.StatusInternalServerError, errors.Wrap(err, "Error in getService")
 	}
 
+	if service == nil || service.Removed != "" {
+		return http.StatusBadRequest, fmt.Errorf("Service %v has been deleted", config.ServiceID)
+	}
+
 	if scaleAction == "up" {
 		newScale = service.Scale + int64(scaleChange)
 	} else if scaleAction == "down" {
