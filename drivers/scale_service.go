@@ -88,6 +88,9 @@ func (s *ScaleServiceDriver) Execute(conf interface{}, apiClient client.RancherC
 			return http.StatusBadRequest, fmt.Errorf("Cannot scale above provided max scale value")
 		}
 	} else if scaleAction == "down" {
+		if service.Scale-int64(scaleChange) <= 0 {
+			return http.StatusBadRequest, fmt.Errorf("Cannot have negative scale")
+		}
 		newScale = service.Scale - int64(scaleChange)
 		if newScale < min {
 			return http.StatusBadRequest, fmt.Errorf("Cannot scale below provided min scale value")
