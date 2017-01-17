@@ -213,7 +213,7 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 	}
 }
 
-func TestWebhookCreateInvalidMinMax(t *testing.T) {
+func TestWebhookCreateInvalidMinMaxAction(t *testing.T) {
 	constructURL := fmt.Sprintf("%s/v1-webhooks/receivers?projectId=1a1", server.URL)
 	jsonStr := []byte(`{"driver":"scaleService","name":"wh-name",
 		"scaleServiceConfig": {"serviceId": "id", "amount": 1, "action": "up", "min": -1, "max": 4}}`)
@@ -241,6 +241,48 @@ func TestWebhookCreateInvalidMinMax(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code == 200 {
 		t.Fatalf("Invalid max")
+	}
+
+	jsonStr = []byte(`{"driver":"scaleService","name":"wh-name",
+		"scaleServiceConfig": {"serviceId": "id", "amount": 1.5, "action": "up", "min": 1, "max": 4}}`)
+	request, err = http.NewRequest("POST", constructURL, bytes.NewBuffer(jsonStr))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response = httptest.NewRecorder()
+	handler = HandleError(schemas, r.ConstructPayload)
+	handler.ServeHTTP(response, request)
+	if response.Code != 400 {
+		t.Fatalf("Amount of type float is invalid")
+	}
+
+	jsonStr = []byte(`{"driver":"scaleService","name":"wh-name",
+		"scaleServiceConfig": {"serviceId": "id", "amount": 1, "action": "up", "min": 1.5, "max": 4}}`)
+	request, err = http.NewRequest("POST", constructURL, bytes.NewBuffer(jsonStr))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response = httptest.NewRecorder()
+	handler = HandleError(schemas, r.ConstructPayload)
+	handler.ServeHTTP(response, request)
+	if response.Code != 400 {
+		t.Fatalf("Min of type float is invalid")
+	}
+
+	jsonStr = []byte(`{"driver":"scaleService","name":"wh-name",
+		"scaleServiceConfig": {"serviceId": "id", "amount": 1, "action": "up", "min": 1, "max": 4.5}}`)
+	request, err = http.NewRequest("POST", constructURL, bytes.NewBuffer(jsonStr))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response = httptest.NewRecorder()
+	handler = HandleError(schemas, r.ConstructPayload)
+	handler.ServeHTTP(response, request)
+	if response.Code != 400 {
+		t.Fatalf("Max of type float is invalid")
 	}
 }
 
