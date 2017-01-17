@@ -70,8 +70,8 @@ func (s *ScaleServiceDriver) Execute(conf interface{}, apiClient client.RancherC
 	serviceID := config.ServiceID
 	scaleAction := config.ScaleAction
 	scaleChange := config.ScaleChange
-	min := int64(config.Min)
-	max := int64(config.Max)
+	min := config.Min
+	max := config.Max
 
 	service, err := apiClient.Service.ById(serviceID)
 	if err != nil {
@@ -83,12 +83,12 @@ func (s *ScaleServiceDriver) Execute(conf interface{}, apiClient client.RancherC
 	}
 
 	if scaleAction == "up" {
-		newScale = service.Scale + int64(scaleChange)
+		newScale = service.Scale + scaleChange
 		if newScale > max {
 			return http.StatusBadRequest, fmt.Errorf("Cannot scale above provided max scale value")
 		}
 	} else if scaleAction == "down" {
-		newScale = service.Scale - int64(scaleChange)
+		newScale = service.Scale - scaleChange
 		if newScale < min {
 			return http.StatusBadRequest, fmt.Errorf("Cannot scale below provided min scale value")
 		}
