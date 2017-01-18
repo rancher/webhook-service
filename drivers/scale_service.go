@@ -53,7 +53,7 @@ func (s *ScaleServiceDriver) ValidatePayload(conf interface{}, apiClient client.
 		return http.StatusBadRequest, fmt.Errorf("Invalid service %v", config.ServiceID)
 	}
 
-	if service.Kind != "service" {
+	if service.Kind != "service" && service.Kind != "loadBalancerService" {
 		return http.StatusBadRequest, fmt.Errorf("Can only create webhooks for Services. The supplied service is of type %v", service.Kind)
 	}
 
