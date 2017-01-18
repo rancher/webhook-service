@@ -81,7 +81,7 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 	}
 	if wh.Name != "wh-name" || wh.Driver != "scaleService" || wh.Id != "1" || wh.URL == "" || wh.ScaleServiceConfig.ServiceID != "id" ||
 		wh.ScaleServiceConfig.ScaleAction != "up" || wh.ScaleServiceConfig.ScaleChange != 1 || wh.ScaleServiceConfig.Min != 1 ||
-		wh.ScaleServiceConfig.Max != 4 {
+		wh.ScaleServiceConfig.Max != 4 || wh.ScaleServiceConfig.Type != "scaleService" {
 		t.Fatalf("Unexpected webhook: %#v", wh)
 	}
 	if !strings.HasSuffix(wh.Links["self"], "/v1-webhooks/receivers/1?projectId=1a1") {
@@ -119,7 +119,7 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 	}
 	if wh.Name != "wh-name" || wh.Driver != "scaleService" || wh.Id != "1" || wh.URL == "" || wh.ScaleServiceConfig.ServiceID != "id" ||
 		wh.ScaleServiceConfig.ScaleAction != "up" || wh.ScaleServiceConfig.ScaleChange != 1 || wh.ScaleServiceConfig.Min != 1 ||
-		wh.ScaleServiceConfig.Max != 4 {
+		wh.ScaleServiceConfig.Max != 4 || wh.ScaleServiceConfig.Type != "scaleService" {
 		t.Fatalf("Unexpected webhook: %#v", wh)
 	}
 	if !strings.HasSuffix(wh.Links["self"], "/v1-webhooks/receivers/1?projectId=1a1") {
@@ -165,7 +165,7 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 	wh = &whCollection.Data[0]
 	if wh.Name != "wh-name" || wh.Driver != "scaleService" || wh.Id != "1" || wh.URL == "" || wh.ScaleServiceConfig.ServiceID != "id" ||
 		wh.ScaleServiceConfig.ScaleAction != "up" || wh.ScaleServiceConfig.ScaleChange != 1 || wh.ScaleServiceConfig.Min != 1 ||
-		wh.ScaleServiceConfig.Max != 4 {
+		wh.ScaleServiceConfig.Max != 4 || wh.ScaleServiceConfig.Type != "scaleService" {
 		t.Fatalf("Unexpected webhook: %#v", wh)
 	}
 	if !strings.HasSuffix(wh.Links["self"], "/v1-webhooks/receivers/1?projectId=1a1") {

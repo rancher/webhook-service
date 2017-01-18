@@ -7,4 +7,5 @@ type ScaleService struct {
 	ScaleAction string `json:"action,omitempty" mapstructure:"action"`
 	Min         int64  `json:"min,omitempty" mapstructure:"min"`
 	Max         int64  `json:"max,omitempty" mapstructure:"max"`
+	Type        string `json:"type,omitempty" mapstructure:"type"`
 }
