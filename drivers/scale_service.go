@@ -44,6 +44,10 @@ func (s *ScaleServiceDriver) ValidatePayload(conf interface{}, apiClient client.
 		return http.StatusBadRequest, fmt.Errorf("Maximum scale not provided/invalid")
 	}
 
+	if config.Min >= config.Max {
+		return http.StatusBadRequest, fmt.Errorf("Max must be greater than min")
+	}
+
 	service, err := apiClient.Service.ById(config.ServiceID)
 	if err != nil {
 		return http.StatusInternalServerError, errors.Wrap(err, "Error in getService")
