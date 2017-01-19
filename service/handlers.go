@@ -92,7 +92,7 @@ func (rh *RouteHandler) GetWebhook(w http.ResponseWriter, r *http.Request) (int,
 
 	driver := drivers.GetDriver(webhook.Driver)
 	if driver == nil {
-		return 500, fmt.Errorf("Can't find driver %v", webhook.Driver)
+		return 400, fmt.Errorf("Can't find driver %v", webhook.Driver)
 	}
 
 	respWebhook, err := newWebhook(apiContext, webhook.URL, webhook.ID, webhook.Driver, webhook.Name,
@@ -129,7 +129,8 @@ func (rh *RouteHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) (i
 
 	err = apiClient.GenericObject.Delete(obj)
 	if err != nil {
-		return 500, err
+		statusCode := err.(*client.ApiError).StatusCode
+		return statusCode, err
 	}
 	return 204, nil
 }

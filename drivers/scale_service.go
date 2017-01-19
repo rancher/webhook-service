@@ -101,7 +101,8 @@ func (s *ScaleServiceDriver) Execute(conf interface{}, apiClient client.RancherC
 		CurrentScale: newScale,
 	})
 	if err != nil {
-		return http.StatusInternalServerError, errors.Wrap(err, "Error in updateService")
+		statusCode := err.(*client.ApiError).StatusCode
+		return statusCode, errors.Wrap(err, "Error in updateService")
 	}
 	return http.StatusOK, nil
 }
