@@ -109,6 +109,7 @@ func (s *ScaleServiceDriver) Execute(conf interface{}, apiClient client.RancherC
 func (s *ScaleServiceDriver) ConvertToConfigAndSetOnWebhook(conf interface{}, webhook *model.Webhook) error {
 	if scaleConfig, ok := conf.(model.ScaleService); ok {
 		webhook.ScaleServiceConfig = scaleConfig
+		webhook.ScaleServiceConfig.Type = webhook.Driver
 		return nil
 	} else if configMap, ok := conf.(map[string]interface{}); ok {
 		config := model.ScaleService{}
@@ -117,6 +118,7 @@ func (s *ScaleServiceDriver) ConvertToConfigAndSetOnWebhook(conf interface{}, we
 			return err
 		}
 		webhook.ScaleServiceConfig = config
+		webhook.ScaleServiceConfig.Type = webhook.Driver
 		return nil
 	}
 	return fmt.Errorf("Can't convert config %v", conf)
