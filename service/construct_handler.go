@@ -49,13 +49,13 @@ func (rh *RouteHandler) ConstructPayload(w http.ResponseWriter, r *http.Request)
 		return 400, fmt.Errorf("Driver not provided")
 	}
 
-	driverConfig := getDriverConfig(wh)
-	if driverConfig == nil {
+	driver := drivers.GetDriver(wh.Driver)
+	if driver == nil {
 		return 400, fmt.Errorf("Invalid driver %v", wh.Driver)
 	}
 
-	driver := drivers.GetDriver(wh.Driver)
-	if driver == nil {
+	driverConfig := getDriverConfig(wh)
+	if driverConfig == nil {
 		return 400, fmt.Errorf("Invalid driver %v", wh.Driver)
 	}
 

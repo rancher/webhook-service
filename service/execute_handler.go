@@ -19,7 +19,7 @@ func (rh *RouteHandler) Execute(w http.ResponseWriter, r *http.Request) (int, er
 	})
 
 	if err != nil || !token.Valid {
-		return 500, err
+		return 400, fmt.Errorf("Invalid token error : %v", err)
 	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok {
