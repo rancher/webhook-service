@@ -286,6 +286,23 @@ func TestWebhookCreateInvalidMinMaxAction(t *testing.T) {
 	}
 }
 
+func TestCreateWithInvalidDriver(t *testing.T) {
+	constructURL := fmt.Sprintf("%s/v1-webhooks/receivers?projectId=1a1", server.URL)
+	jsonStr := []byte(`{"driver":"driverInvalid","name":"wh-name",
+		"scaleServiceConfig": {"serviceId": "id", "amount": 1, "action": "up", "min": -1, "max": 4}}`)
+	request, err := http.NewRequest("POST", constructURL, bytes.NewBuffer(jsonStr))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler := HandleError(schemas, r.ConstructPayload)
+	handler.ServeHTTP(response, request)
+	if response.Code != 400 {
+		t.Fatalf("Invalid driverservice/execute_handler.go")
+	}
+}
+
 func TestMissingProjectIdHeader(t *testing.T) {
 	constructURL := fmt.Sprintf("%s/v1-webhooks", server.URL)
 	request, err := http.NewRequest("POST", constructURL, bytes.NewBuffer([]byte(`{}`)))
