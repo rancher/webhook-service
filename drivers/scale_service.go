@@ -61,6 +61,12 @@ func (s *ScaleServiceDriver) ValidatePayload(conf interface{}, apiClient client.
 		return http.StatusBadRequest, fmt.Errorf("Can only create webhooks for Services. The supplied service is of type %v", service.Kind)
 	}
 
+	if val, ok := service.LaunchConfig.Labels["io.rancher.scheduler.global"]; ok {
+		if val == "true" {
+			return http.StatusBadRequest, fmt.Errorf("Cannot create webhook for global service %s", config.ServiceID)
+		}
+	}
+
 	return http.StatusOK, nil
 }
 
