@@ -46,6 +46,18 @@ func init() {
 	}
 	drivers.Drivers["serviceUpgrade"] = &MockUpgradeServiceDriver{expectedConfig: expectedUpgradeServiceConfig}
 
+	HostSelector := make(map[string]string)
+	HostSelector["foo"] = "bar"
+	expectedHostConfig := model.ScaleHost{
+		Action:       "up",
+		Amount:       1,
+		HostSelector: HostSelector,
+		Min:          1,
+		Max:          4,
+		DeleteOption: "mostRecent",
+	}
+	drivers.Drivers["scaleHost"] = &MockHostDriver{expectedConfig: expectedHostConfig}
+
 	privateKey := util.ParsePrivateKey("../testutils/private.pem")
 	publicKey := util.ParsePublicKey("../testutils/public.pem")
 	r = &RouteHandler{
