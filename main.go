@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+	"os"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/rancher/webhook-service/drivers"
 	"github.com/rancher/webhook-service/service"
 	"github.com/urfave/cli"
-	"net/http"
-	"os"
 )
 
 var VERSION = "v0.0.0-dev"
@@ -56,6 +57,7 @@ func StartWebhook(c *cli.Context) {
 	if err != nil {
 		log.Fatal("rsa-private-key-file or rsa-public-key-file not provided, halting")
 	}
+
 	rh := &service.RouteHandler{
 		PrivateKey:    privateKey,
 		PublicKey:     publicKey,

@@ -11,8 +11,8 @@ var Drivers map[string]WebhookDriver
 
 //WebhookDriver interface for all drivers
 type WebhookDriver interface {
-	ValidatePayload(config interface{}, apiClient client.RancherClient) (int, error)
-	Execute(config interface{}, apiClient client.RancherClient) (int, error)
+	ValidatePayload(config interface{}, apiClient *client.RancherClient) (int, error)
+	Execute(config interface{}, apiClient *client.RancherClient, requestBody interface{}) (int, error)
 	GetDriverConfigResource() interface{}
 	ConvertToConfigAndSetOnWebhook(conf interface{}, webhook *model.Webhook) error
 	CustomizeSchema(schema *v1client.Schema) *v1client.Schema
@@ -22,6 +22,7 @@ type WebhookDriver interface {
 func RegisterDrivers() {
 	Drivers = map[string]WebhookDriver{}
 	Drivers["scaleService"] = &ScaleServiceDriver{}
+	Drivers["serviceUpgrade"] = &ServiceUpgradeDriver{}
 }
 
 //GetDriver looks up the driver
