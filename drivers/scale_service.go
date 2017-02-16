@@ -67,6 +67,10 @@ func (s *ScaleServiceDriver) ValidatePayload(conf interface{}, apiClient client.
 		}
 	}
 
+	if service.LaunchConfig.ImageUuid == "docker:rancher/none" {
+		return http.StatusBadRequest, fmt.Errorf("Cannot create webhook for service with no image %s", config.ServiceID)
+	}
+
 	return http.StatusOK, nil
 }
 
