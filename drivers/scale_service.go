@@ -14,7 +14,7 @@ import (
 type ScaleServiceDriver struct {
 }
 
-func (s *ScaleServiceDriver) ValidatePayload(conf interface{}, apiClient client.RancherClient) (int, error) {
+func (s *ScaleServiceDriver) ValidatePayload(conf interface{}, apiClient *client.RancherClient) (int, error) {
 	config, ok := conf.(model.ScaleService)
 	if !ok {
 		return http.StatusInternalServerError, fmt.Errorf("Can't process config")
@@ -74,7 +74,7 @@ func (s *ScaleServiceDriver) ValidatePayload(conf interface{}, apiClient client.
 	return http.StatusOK, nil
 }
 
-func (s *ScaleServiceDriver) Execute(conf interface{}, apiClient client.RancherClient) (int, error) {
+func (s *ScaleServiceDriver) Execute(conf interface{}, apiClient *client.RancherClient, requestBody interface{}) (int, error) {
 	config := &model.ScaleService{}
 	err := mapstructure.Decode(conf, config)
 	if err != nil {

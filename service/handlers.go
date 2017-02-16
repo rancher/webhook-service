@@ -207,7 +207,7 @@ func (rh *RouteHandler) convertToWebhookGenericObject(genericObject client.Gener
 	}, nil
 }
 
-func (rh *RouteHandler) isUniqueName(webhookName string, projectID string, apiClient client.RancherClient) (int, error) {
+func (rh *RouteHandler) isUniqueName(webhookName string, projectID string, apiClient *client.RancherClient) (int, error) {
 	filters := make(map[string]interface{})
 	filters["name"] = webhookName
 	obj, err := apiClient.GenericObject.List(&client.ListOpts{

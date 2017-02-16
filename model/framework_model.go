@@ -13,11 +13,12 @@ type ServerAPIError struct {
 
 type Webhook struct {
 	v1client.Resource
-	URL                string       `json:"url"`
-	Driver             string       `json:"driver"`
-	Name               string       `json:"name"`
-	State              string       `json:"state"`
-	ScaleServiceConfig ScaleService `json:"scaleServiceConfig"`
+	URL                  string         `json:"url"`
+	Driver               string         `json:"driver"`
+	Name                 string         `json:"name"`
+	State                string         `json:"state"`
+	ScaleServiceConfig   ScaleService   `json:"scaleServiceConfig"`
+	ServiceUpgradeConfig ServiceUpgrade `json:"serviceUpgradeConfig"`
 }
 
 type WebhookCollection struct {

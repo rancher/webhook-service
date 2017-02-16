@@ -9,12 +9,12 @@ import (
 )
 
 type RancherClientFactory interface {
-	GetClient(projectID string) (client.RancherClient, error)
+	GetClient(projectID string) (*client.RancherClient, error)
 }
 
 type ClientFactory struct{}
 
-func (f *ClientFactory) GetClient(projectID string) (client.RancherClient, error) {
+func (f *ClientFactory) GetClient(projectID string) (*client.RancherClient, error) {
 	config := config.GetConfig()
 	url := fmt.Sprintf("%s/projects/%s/schemas", config.CattleURL, projectID)
 	apiClient, err := client.NewRancherClient(&client.ClientOpts{
@@ -24,7 +24,7 @@ func (f *ClientFactory) GetClient(projectID string) (client.RancherClient, error
 		SecretKey: config.CattleSecretKey,
 	})
 	if err != nil {
-		return client.RancherClient{}, fmt.Errorf("Error in creating API client")
+		return &client.RancherClient{}, fmt.Errorf("Error in creating API client")
 	}
-	return *apiClient, nil
+	return apiClient, nil
 }

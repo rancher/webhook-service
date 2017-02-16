@@ -9,20 +9,20 @@ import (
 	"strings"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/pborman/uuid"
+	"github.com/dchest/uniuri"
 	"github.com/pkg/errors"
 	"github.com/rancher/go-rancher/api"
 	"github.com/rancher/go-rancher/v2"
-	"github.com/rancher/rancher-auth-service/util"
 	"github.com/rancher/webhook-service/drivers"
 	"github.com/rancher/webhook-service/model"
 )
 
 func (rh *RouteHandler) ConstructPayload(w http.ResponseWriter, r *http.Request) (int, error) {
 	apiContext := api.GetApiContext(r)
+
 	wh := &model.Webhook{}
 	logrus.Infof("Construct Payload")
-	bytes, err := ioutil.ReadAll(r.Body)
+	requestBytes, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return 500, err
 	}
@@ -37,7 +37,7 @@ func (rh *RouteHandler) ConstructPayload(w http.ResponseWriter, r *http.Request)
 		return errCode, err
 	}
 
-	if err := json.Unmarshal(bytes, &wh); err != nil {
+	if err := json.Unmarshal(requestBytes, &wh); err != nil {
 		return 400, errors.Wrap(err, "Bad request body")
 	}
 
@@ -74,30 +74,19 @@ func (rh *RouteHandler) ConstructPayload(w http.ResponseWriter, r *http.Request)
 		return code, err
 	}
 
-	uuid := uuid.New()
-	config := map[string]interface{}{
-		"projectId": projectID,
-		"uuid":      uuid,
-		"driver":    wh.Driver,
-		"config":    driverConfig,
-	}
-	jwt, err := util.CreateTokenWithPayload(config, rh.PrivateKey)
-	if err != nil {
-		return 500, err
-	}
+	uuid := uniuri.NewLen(40)
 
 	url := apiContext.UrlBuilder.Version("v1-webhooks")
-	url = url + "/endpoint?token="
-	jwt = url + jwt
+	url = url + "/endpoint?key=" + uuid + "&projectId=" + projectID
 
 	//saveWebhook needs only user fields
-	webhook, err := saveWebhook(uuid, wh.Name, wh.Driver, jwt, driverConfig, apiClient)
+	webhook, err := saveWebhook(uuid, wh.Name, wh.Driver, url, driverConfig, apiClient)
 	if err != nil {
 		return 500, err
 	}
 
 	//needs only user fields
-	whResponse, err := newWebhook(apiContext, jwt, webhook.Id, wh.Driver, wh.Name, driverConfig, driver,
+	whResponse, err := newWebhook(apiContext, url, webhook.Id, wh.Driver, wh.Name, driverConfig, driver,
 		webhook.State, r)
 	if err != nil {
 		return 500, errors.Wrap(err, "Unable to create webhook response")
@@ -106,7 +95,7 @@ func (rh *RouteHandler) ConstructPayload(w http.ResponseWriter, r *http.Request)
 	return 200, nil
 }
 
-func saveWebhook(uuid string, name string, driver string, url string, config interface{}, apiClient client.RancherClient) (*client.GenericObject, error) {
+func saveWebhook(uuid string, name string, driver string, url string, config interface{}, apiClient *client.RancherClient) (*client.GenericObject, error) {
 	resourceData := map[string]interface{}{
 		"url":    url,
 		"driver": driver,
@@ -120,7 +109,7 @@ func saveWebhook(uuid string, name string, driver string, url string, config int
 	})
 
 	if err != nil {
-		return &client.GenericObject{}, fmt.Errorf("Failed to create webhook : %v", err)
+		return &client.GenericObject{}, fmt.Errorf("Failed to create webhook: %v", err)
 	}
 	return obj, nil
 }

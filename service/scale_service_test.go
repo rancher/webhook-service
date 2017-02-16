@@ -11,50 +11,14 @@ import (
 	"testing"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/gorilla/mux"
 	"github.com/mitchellh/mapstructure"
 	v1client "github.com/rancher/go-rancher/client"
 	"github.com/rancher/go-rancher/v2"
-	"github.com/rancher/rancher-auth-service/util"
 	"github.com/rancher/webhook-service/drivers"
 	"github.com/rancher/webhook-service/model"
 )
 
-var server *httptest.Server
-var router *mux.Router
-var r *RouteHandler
-
-// TODO Refactor this test to use gocheck
-func init() {
-	drivers.Drivers = map[string]drivers.WebhookDriver{}
-
-	expected := model.ScaleService{
-		ScaleAction: "up",
-		ScaleChange: 1,
-		ServiceID:   "id",
-		Min:         1,
-		Max:         4,
-	}
-	drivers.Drivers["scaleService"] = &MockDriver{expectedConfig: expected}
-
-	privateKey := util.ParsePrivateKey("../testutils/private.pem")
-	publicKey := util.ParsePublicKey("../testutils/public.pem")
-	r = &RouteHandler{
-		PrivateKey: privateKey,
-		PublicKey:  publicKey,
-	}
-
-	mockWebhook := &mockGenericObject{
-		created: map[string]*client.GenericObject{},
-	}
-	r.ClientFactory = &MockRancherClientFactory{
-		mw: mockWebhook,
-	}
-	router = NewRouter(r)
-	server = httptest.NewServer(router)
-}
-
-func TestWebhookCreateAndExecute(t *testing.T) {
+func TestWebhookCreateAndExecuteScaleService(t *testing.T) {
 	// Test creating a webhook
 	constructURL := fmt.Sprintf("%s/v1-webhooks/receivers?projectId=1a1", server.URL)
 	jsonStr := []byte(`{"driver":"scaleService","name":"wh-name",
@@ -92,7 +56,7 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 	response = httptest.NewRecorder()
 	handler = HandleError(schemas, r.ConstructPayload)
 	handler.ServeHTTP(response, request)
-	if response.Code != 400 {
+	if response.Code != 400 && response.Header().Get("Content-Type") != "application/json" {
 		t.Fatalf("Duplicate name webhook creation should not be allowed")
 	}
 
@@ -207,13 +171,13 @@ func TestWebhookCreateAndExecute(t *testing.T) {
 	response = httptest.NewRecorder()
 	handler = HandleError(schemas, r.Execute)
 	handler.ServeHTTP(response, requestExecute)
-	if response.Code != 403 {
+	if response.Code != 403 && response.Header().Get("Content-Type") != "application/json" {
 		fmt.Printf("response : %v\n", response)
 		t.Fatal("Execute - Webhook not revoked after delete")
 	}
 }
 
-func TestWebhookCreateInvalidMinMaxAction(t *testing.T) {
+func TestWebhookInvalidMinMaxActionScaleService(t *testing.T) {
 	constructURL := fmt.Sprintf("%s/v1-webhooks/receivers?projectId=1a1", server.URL)
 	jsonStr := []byte(`{"driver":"scaleService","name":"wh-name",
 		"scaleServiceConfig": {"serviceId": "id", "amount": 1, "action": "up", "min": -1, "max": 4}}`)
@@ -303,52 +267,11 @@ func TestCreateWithInvalidDriver(t *testing.T) {
 	}
 }
 
-func TestMissingProjectIdHeader(t *testing.T) {
-	constructURL := fmt.Sprintf("%s/v1-webhooks", server.URL)
-	request, err := http.NewRequest("POST", constructURL, bytes.NewBuffer([]byte(`{}`)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response := httptest.NewRecorder()
-	handler := HandleError(schemas, r.ConstructPayload)
-	handler.ServeHTTP(response, request)
-	if response.Code != 400 {
-		t.Fatalf("Expected 400 response code because of missing projectId, got: %v", response.Code)
-	}
-	resp, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	respMessage := string(resp)
-	strings.Contains(respMessage, "projectId")
-}
-
-func TestMissingContentTypeHeader(t *testing.T) {
-	constructURL := fmt.Sprintf("%s/v1-webhooks?projectId=1a1", server.URL)
-	request, err := http.NewRequest("POST", constructURL, bytes.NewBuffer([]byte(`{}`)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	response := httptest.NewRecorder()
-	handler := HandleError(schemas, r.ConstructPayload)
-	handler.ServeHTTP(response, request)
-	if response.Code != 400 {
-		t.Fatalf("Expected 400 response code because of missing Content-Type header, got: %v", response.Code)
-	}
-	resp, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	respMessage := string(resp)
-	strings.Contains(respMessage, "application/json")
-}
-
-type MockDriver struct {
+type MockServiceDriver struct {
 	expectedConfig model.ScaleService
 }
 
-func (s *MockDriver) Execute(conf interface{}, apiClient client.RancherClient) (int, error) {
+func (s *MockServiceDriver) Execute(conf interface{}, apiClient *client.RancherClient, payload interface{}) (int, error) {
 	config := &model.ScaleService{}
 	err := mapstructure.Decode(conf, config)
 	if err != nil {
@@ -367,11 +290,11 @@ func (s *MockDriver) Execute(conf interface{}, apiClient client.RancherClient) (
 		return 500, fmt.Errorf("ServiceChange. Expected %v, Actual %v", s.expectedConfig.ScaleChange, config.ScaleChange)
 	}
 
-	logrus.Infof("Validate payload of mock driver")
+	logrus.Infof("Execute of mock scaleService driver")
 	return 0, nil
 }
 
-func (s *MockDriver) ValidatePayload(conf interface{}, apiClient client.RancherClient) (int, error) {
+func (s *MockServiceDriver) ValidatePayload(conf interface{}, apiClient *client.RancherClient) (int, error) {
 	config, ok := conf.(model.ScaleService)
 	if !ok {
 		return http.StatusInternalServerError, fmt.Errorf("Can't process config")
@@ -397,66 +320,19 @@ func (s *MockDriver) ValidatePayload(conf interface{}, apiClient client.RancherC
 		return 500, fmt.Errorf("Max. Expected %v, Actual %v", s.expectedConfig.Max, config.Max)
 	}
 
-	logrus.Infof("Validate payload of mock driver")
+	logrus.Infof("Validate payload of mock scaleService driver")
 	return 0, nil
 }
 
-func (s *MockDriver) GetDriverConfigResource() interface{} {
+func (s *MockServiceDriver) GetDriverConfigResource() interface{} {
 	return model.ScaleService{}
 }
 
-func (s *MockDriver) CustomizeSchema(schema *v1client.Schema) *v1client.Schema {
+func (s *MockServiceDriver) CustomizeSchema(schema *v1client.Schema) *v1client.Schema {
 	return schema
 }
 
-func (s *MockDriver) ConvertToConfigAndSetOnWebhook(conf interface{}, webhook *model.Webhook) error {
+func (s *MockServiceDriver) ConvertToConfigAndSetOnWebhook(conf interface{}, webhook *model.Webhook) error {
 	ss := &drivers.ScaleServiceDriver{}
 	return ss.ConvertToConfigAndSetOnWebhook(conf, webhook)
-}
-
-type MockRancherClientFactory struct {
-	mw *mockGenericObject
-}
-
-func (e *MockRancherClientFactory) GetClient(projectID string) (client.RancherClient, error) {
-	logrus.Infof("RancherClientFactory GetClient")
-
-	mockClient := &client.RancherClient{
-		GenericObject: e.mw,
-	}
-	return *mockClient, nil
-}
-
-type mockGenericObject struct {
-	client.GenericObjectOperations
-	created map[string]*client.GenericObject
-}
-
-func (m *mockGenericObject) Create(webhook *client.GenericObject) (*client.GenericObject, error) {
-	webhook.Links = make(map[string]string)
-	webhook.Links["self"] = "self"
-	webhook.Id = "1"
-	m.created[webhook.Id] = webhook
-	return webhook, nil
-}
-
-func (m *mockGenericObject) List(opts *client.ListOpts) (*client.GenericObjectCollection, error) {
-	webhooks := []client.GenericObject{}
-	for _, wh := range m.created {
-		webhooks = append(webhooks, *wh)
-	}
-	return &client.GenericObjectCollection{Data: webhooks}, nil
-}
-
-func (m *mockGenericObject) ById(id string) (*client.GenericObject, error) {
-	fmt.Printf("%v %#v\n\n", id, m.created)
-	if wh, ok := m.created[id]; ok {
-		return wh, nil
-	}
-	return nil, fmt.Errorf("Doesn't exist")
-}
-
-func (m *mockGenericObject) Delete(container *client.GenericObject) error {
-	delete(m.created, container.Id)
-	return nil
 }
