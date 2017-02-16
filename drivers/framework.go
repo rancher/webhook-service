@@ -22,6 +22,7 @@ type WebhookDriver interface {
 func RegisterDrivers() {
 	Drivers = map[string]WebhookDriver{}
 	Drivers["scaleService"] = &ScaleServiceDriver{}
+	Drivers["scaleHost"] = &ScaleHostDriver{}
 }
 
 //GetDriver looks up the driver
