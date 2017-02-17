@@ -204,14 +204,14 @@ func (s *ServiceUpgradeDriver) CustomizeSchema(schema *v1client.Schema) *v1clien
 }
 
 func wait(apiClient *client.RancherClient, service *client.Service) error {
-	for i := 0; i < 6; i++ {
+	for i := 0; i < 36; i++ {
 		if err := apiClient.Reload(&service.Resource, service); err != nil {
 			return err
 		}
 		if service.Transitioning != "yes" {
 			break
 		}
-		time.Sleep(15 * time.Second * time.Duration(service.Scale))
+		time.Sleep(5 * time.Second)
 	}
 
 	switch service.Transitioning {
