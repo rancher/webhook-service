@@ -23,6 +23,7 @@ func RegisterDrivers() {
 	Drivers = map[string]WebhookDriver{}
 	Drivers["scaleService"] = &ScaleServiceDriver{}
 	Drivers["serviceUpgrade"] = &ServiceUpgradeDriver{}
+	Drivers["scaleHost"] = &ScaleHostDriver{}
 }
 
 //GetDriver looks up the driver
