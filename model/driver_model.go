@@ -28,6 +28,6 @@ type ScaleHost struct {
 	Action       string            `json:"action,omitempty" mapstructure:"action"`
 	Min          int64             `json:"min,omitempty" mapstructure:"min"`
 	Max          int64             `json:"max,omitempty" mapstructure:"max"`
-	DeleteOption string            `json:"deleteOption" mapstructure:"deleteOption"`
+	DeleteOption string            `json:"deleteOption,omitempty" mapstructure:"deleteOption"`
 	Type         string            `json:"type,omitempty" mapstructure:"type"`
 }
