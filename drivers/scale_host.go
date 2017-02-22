@@ -151,33 +151,33 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 		return http.StatusBadRequest, fmt.Errorf("Cannot use custom hosts for scaling up")
 	}
 
-	// Consider the least recently created as base host for cloning
-	// Remove domain from host name, scaleHost12.foo.com becomes scaleHost12
-	// Remove largest number suffix from end, scaleHost12 becomes scaleHost
-	// Name has precedence over hostname. If name is set, empty this field for the clones
-	host := hostScalingGroup[baseHostIndex]
-	if host.Name != "" {
-		baseHostName = host.Name
-		host.Name = ""
-	} else {
-		baseHostName = host.Hostname
-	}
-	baseHostName = strings.Split(baseHostName, ".")[0]
-	baseSuffix := re.FindString(baseHostName)
-	basePrefix := strings.TrimRight(baseHostName, baseSuffix)
-
-	// Use raw call to get host so as to get additional driver config
-	getURL := cattleURL + "/projects/" + host.AccountId + "/hosts/" + host.Id
-	log.Infof("Getting config for host %s as base host for cloning", host.Id)
-	hostRaw, err := getHosts(getURL)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-
-	hostCreateURL := cattleURL + "/projects/" + host.AccountId + "/hosts"
 	count = 0
 
 	if action == "up" {
+		// Consider the least recently created as base host for cloning
+		// Remove domain from host name, scaleHost12.foo.com becomes scaleHost12
+		// Remove largest number suffix from end, scaleHost12 becomes scaleHost
+		// Name has precedence over hostname. If name is set, empty this field for the clones
+		host := hostScalingGroup[baseHostIndex]
+		if host.Name != "" {
+			baseHostName = host.Name
+			host.Name = ""
+		} else {
+			baseHostName = host.Hostname
+		}
+		baseHostName = strings.Split(baseHostName, ".")[0]
+		baseSuffix := re.FindString(baseHostName)
+		basePrefix := strings.TrimRight(baseHostName, baseSuffix)
+
+		// Use raw call to get host so as to get additional driver config
+		getURL := cattleURL + "/projects/" + host.AccountId + "/hosts/" + host.Id
+		log.Infof("Getting config for host %s as base host for cloning", host.Id)
+		hostRaw, err := getHosts(getURL)
+		if err != nil {
+			return http.StatusInternalServerError, err
+		}
+
+		hostCreateURL := cattleURL + "/projects/" + host.AccountId + "/hosts"
 		newHostScale = amount + int64(len(hostScalingGroup))
 		if newHostScale > max {
 			return http.StatusBadRequest, fmt.Errorf("Cannot scale above provided max scale value")
@@ -236,11 +236,13 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 			return http.StatusBadRequest, fmt.Errorf("Cannot scale below provided min scale value")
 		}
 
+		badHosts := make(map[string]bool)
 		deleteCount := int64(0)
 		for _, host := range hostScalingGroup {
 			state := host.State
 			if state == "inactive" || state == "deactivating" || state == "reconnecting" || state == "disconnected" {
-				log.Infof("Deleting host %s", host.Id)
+				badHosts[host.Id] = true
+				log.Infof("Deleting host %s with priority because of bad state: %s", host.Id, host.State)
 				code, err := deleteHost(host.Id, apiClient)
 				if err != nil {
 					return code, err
@@ -250,9 +252,15 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 		}
 
 		amount -= deleteCount
+		delIndex := count
 		if deleteOption == "mostRecent" {
+			log.Infof("Deleting most recently created hosts")
 			for count < amount {
-				host = hostScalingGroup[count]
+				host := hostScalingGroup[delIndex]
+				if badHosts[host.Id] {
+					delIndex++
+					continue
+				}
 				log.Infof("Deleting host %s", host.Id)
 				code, err := deleteHost(host.Id, apiClient)
 				if err != nil {
@@ -261,9 +269,14 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 				count++
 			}
 		} else if deleteOption == "leastRecent" {
+			log.Infof("Deleting least recently created hosts")
 			for count < amount {
-				index = (int64(len(hostScalingGroup)) - count) - 1
-				host = hostScalingGroup[index]
+				index = (int64(len(hostScalingGroup)) - delIndex) - 1
+				host := hostScalingGroup[index]
+				if badHosts[host.Id] {
+					delIndex++
+					continue
+				}
 				log.Infof("Deleting host %s", host.Id)
 				code, err := deleteHost(host.Id, apiClient)
 				if err != nil {
