@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	v1client "github.com/rancher/go-rancher/client"
@@ -59,8 +60,16 @@ func (s *ScaleHostDriver) ValidatePayload(conf interface{}, apiClient *client.Ra
 		return http.StatusBadRequest, fmt.Errorf("Max must be greater than min")
 	}
 
-	if config.DeleteOption != "mostRecent" && config.DeleteOption != "leastRecent" {
-		return http.StatusBadRequest, fmt.Errorf("Invalid delete option %v", config.DeleteOption)
+	if config.Action == "up" {
+		if config.DeleteOption != "" {
+			return http.StatusBadRequest, fmt.Errorf("Delete option not to be provided while scaling up")
+		}
+	}
+
+	if config.Action == "down" {
+		if config.DeleteOption != "mostRecent" && config.DeleteOption != "leastRecent" {
+			return http.StatusBadRequest, fmt.Errorf("Invalid delete option %v", config.DeleteOption)
+		}
 	}
 
 	return http.StatusOK, nil
@@ -159,6 +168,7 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 
 	// Use raw call to get host so as to get additional driver config
 	getURL := cattleURL + "/projects/" + host.AccountId + "/hosts/" + host.Id
+	log.Infof("Getting config for host %s as base host for cloning", host.Id)
 	hostRaw, err := getHosts(getURL)
 	if err != nil {
 		return http.StatusInternalServerError, err
@@ -211,6 +221,7 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 			labels[key] = value
 			hostRaw["labels"] = labels
 
+			log.Infof("Creating host with hostname: %s", name)
 			code, err := createHost(hostRaw, hostCreateURL, httpClient)
 			if err != nil {
 				return code, err
@@ -229,7 +240,11 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 		for _, host := range hostScalingGroup {
 			state := host.State
 			if state == "inactive" || state == "deactivating" || state == "reconnecting" || state == "disconnected" {
-				deleteHost(host.Id, apiClient)
+				log.Infof("Deleting host %s", host.Id)
+				code, err := deleteHost(host.Id, apiClient)
+				if err != nil {
+					return code, err
+				}
 				deleteCount++
 			}
 		}
@@ -238,6 +253,7 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 		if deleteOption == "mostRecent" {
 			for count < amount {
 				host = hostScalingGroup[count]
+				log.Infof("Deleting host %s", host.Id)
 				code, err := deleteHost(host.Id, apiClient)
 				if err != nil {
 					return code, err
@@ -248,6 +264,7 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 			for count < amount {
 				index = (int64(len(hostScalingGroup)) - count) - 1
 				host = hostScalingGroup[index]
+				log.Infof("Deleting host %s", host.Id)
 				code, err := deleteHost(host.Id, apiClient)
 				if err != nil {
 					return code, err
