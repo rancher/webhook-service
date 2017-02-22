@@ -38,7 +38,6 @@ func init() {
 	ServiceSelector["foo"] = "bar"
 	expectedUpgradeServiceConfig := model.ServiceUpgrade{
 		ServiceSelector: ServiceSelector,
-		Image:           "wh-image",
 		Tag:             "wh-tag",
 		BatchSize:       1,
 		IntervalMillis:  2,

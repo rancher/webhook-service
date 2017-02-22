@@ -13,7 +13,6 @@ type ScaleService struct {
 //ServiceUpgrade driver
 type ServiceUpgrade struct {
 	ServiceSelector map[string]string `json:"serviceSelector,omitempty" mapstructure:"serviceSelector"`
-	Image           string            `json:"image,omitempty" mapstructure:"image"`
 	Tag             string            `json:"tag,omitempty" mapstructure:"tag"`
 	BatchSize       int64             `json:"batchSize,omitempty" mapstructure:"batchSize"`
 	IntervalMillis  int64             `json:"intervalMillis,omitempty" mapstructure:"intervalMillis"`
