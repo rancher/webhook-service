@@ -26,10 +26,6 @@ func (s *ServiceUpgradeDriver) ValidatePayload(conf interface{}, apiClient *clie
 		return http.StatusBadRequest, fmt.Errorf("Service selectors not provided")
 	}
 
-	if config.Image == "" {
-		return http.StatusBadRequest, fmt.Errorf("Image not provided")
-	}
-
 	if config.Tag == "" {
 		return http.StatusBadRequest, fmt.Errorf("Tag not provided")
 	}
@@ -53,9 +49,7 @@ func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.Ranch
 		return http.StatusInternalServerError, errors.Wrap(err, "Couldn't unmarshal config")
 	}
 
-	image := config.Image
-	tag := config.Tag
-
+	requestedTag := config.Tag
 	if requestPayload == nil {
 		return http.StatusBadRequest, fmt.Errorf("No Payload recevied from Docker Hub webhook")
 	}
@@ -86,8 +80,7 @@ func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.Ranch
 	}
 
 	pushedImage := imageName + ":" + pushedTag
-	requestedImage := image + ":" + tag
-	if requestedImage != pushedImage {
+	if requestedTag != pushedTag {
 		return http.StatusOK, nil
 	}
 

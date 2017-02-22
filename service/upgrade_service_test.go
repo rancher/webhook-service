@@ -24,7 +24,7 @@ func TestWebhookCreateAndExecuteServiceUpgrade(t *testing.T) {
 	// Test creating a webhook
 	constructURL := fmt.Sprintf("%s/v1-webhooks/receivers?projectId=1a1", server.URL)
 	jsonStr := []byte(`{"driver":"serviceUpgrade","name":"wh-name",
-		"serviceUpgradeConfig": {"serviceSelector": {"foo": "bar"}, "image": "wh-image", "tag": "wh-tag", "batchSize": 1, "intervalMillis":2,
+		"serviceUpgradeConfig": {"serviceSelector": {"foo": "bar"}, "tag": "wh-tag", "batchSize": 1, "intervalMillis":2,
 		"startFirst": true}}`)
 	request, err := http.NewRequest("POST", constructURL, bytes.NewBuffer(jsonStr))
 	if err != nil {
@@ -47,7 +47,7 @@ func TestWebhookCreateAndExecuteServiceUpgrade(t *testing.T) {
 		t.Fatal(err)
 	}
 	if wh.Name != "wh-name" || wh.Driver != "serviceUpgrade" || wh.Id != "1" || wh.URL == "" || wh.ServiceUpgradeConfig.ServiceSelector["foo"] != label["foo"] ||
-		wh.ServiceUpgradeConfig.Image != "wh-image" || wh.ServiceUpgradeConfig.Tag != "wh-tag" || wh.ServiceUpgradeConfig.BatchSize != 1 ||
+		wh.ServiceUpgradeConfig.Tag != "wh-tag" || wh.ServiceUpgradeConfig.BatchSize != 1 ||
 		wh.ServiceUpgradeConfig.IntervalMillis != 2 || wh.ServiceUpgradeConfig.StartFirst != true || wh.ServiceUpgradeConfig.Type != "serviceUpgrade" {
 		t.Fatalf("Unexpected webhook: %#v", wh)
 	}
@@ -77,7 +77,7 @@ func TestWebhookCreateAndExecuteServiceUpgrade(t *testing.T) {
 		t.Fatal(err)
 	}
 	if wh.Name != "wh-name" || wh.Driver != "serviceUpgrade" || wh.Id != "1" || wh.URL == "" || wh.ServiceUpgradeConfig.ServiceSelector["foo"] != label["foo"] ||
-		wh.ServiceUpgradeConfig.Image != "wh-image" || wh.ServiceUpgradeConfig.Tag != "wh-tag" || wh.ServiceUpgradeConfig.BatchSize != 1 ||
+		wh.ServiceUpgradeConfig.Tag != "wh-tag" || wh.ServiceUpgradeConfig.BatchSize != 1 ||
 		wh.ServiceUpgradeConfig.IntervalMillis != 2 || wh.ServiceUpgradeConfig.StartFirst != true || wh.ServiceUpgradeConfig.Type != "serviceUpgrade" {
 		t.Fatalf("Unexpected webhook: %#v", wh)
 	}
@@ -123,7 +123,7 @@ func TestWebhookCreateAndExecuteServiceUpgrade(t *testing.T) {
 	}
 	wh = &whCollection.Data[0]
 	if wh.Name != "wh-name" || wh.Driver != "serviceUpgrade" || wh.Id != "1" || wh.URL == "" || wh.ServiceUpgradeConfig.ServiceSelector["foo"] != label["foo"] ||
-		wh.ServiceUpgradeConfig.Image != "wh-image" || wh.ServiceUpgradeConfig.Tag != "wh-tag" || wh.ServiceUpgradeConfig.BatchSize != 1 ||
+		wh.ServiceUpgradeConfig.Tag != "wh-tag" || wh.ServiceUpgradeConfig.BatchSize != 1 ||
 		wh.ServiceUpgradeConfig.IntervalMillis != 2 || wh.ServiceUpgradeConfig.StartFirst != true || wh.ServiceUpgradeConfig.Type != "serviceUpgrade" {
 		t.Fatalf("Unexpected webhook: %#v", wh)
 	}
@@ -192,10 +192,6 @@ func (s *MockUpgradeServiceDriver) Execute(conf interface{}, apiClient *client.R
 		return 500, fmt.Errorf("ServiceSelector. Expected %v, Actual %v", s.expectedConfig.ServiceSelector, config.ServiceSelector)
 	}
 
-	if config.Image != s.expectedConfig.Image {
-		return 500, fmt.Errorf("Image. Expected %v, Actual %v", s.expectedConfig.Image, config.Image)
-	}
-
 	if config.Tag != s.expectedConfig.Tag {
 		return 500, fmt.Errorf("Tag. Expected %v, Actual %v", s.expectedConfig.Tag, config.Tag)
 	}
@@ -220,10 +216,6 @@ func (s *MockUpgradeServiceDriver) ValidatePayload(conf interface{}, apiClient *
 	config, ok := conf.(model.ServiceUpgrade)
 	if !ok {
 		return http.StatusInternalServerError, fmt.Errorf("Can't process config")
-	}
-
-	if config.Image != s.expectedConfig.Image {
-		return 500, fmt.Errorf("Image. Expected %v, Actual %v", s.expectedConfig.Image, config.Image)
 	}
 
 	if config.Tag != s.expectedConfig.Tag {
