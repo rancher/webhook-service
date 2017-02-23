@@ -3,6 +3,7 @@ package drivers
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -12,6 +13,8 @@ import (
 	"github.com/rancher/go-rancher/v2"
 	"github.com/rancher/webhook-service/model"
 )
+
+var regTag = regexp.MustCompile(`^[\w]+[\w.-]*`)
 
 type ServiceUpgradeDriver struct {
 }
@@ -28,6 +31,11 @@ func (s *ServiceUpgradeDriver) ValidatePayload(conf interface{}, apiClient *clie
 
 	if config.Tag == "" {
 		return http.StatusBadRequest, fmt.Errorf("Tag not provided")
+	}
+
+	err := IsValidTag(config.Tag)
+	if err != nil {
+		return http.StatusBadRequest, err
 	}
 
 	if config.BatchSize <= 0 {
@@ -215,4 +223,13 @@ func wait(apiClient *client.RancherClient, service *client.Service) error {
 	default:
 		return fmt.Errorf("Waiting for %s failed: %s", service.Id, service.TransitioningMessage)
 	}
+}
+
+// IsValidTag checks if tag valid as per Docker tag convention
+func IsValidTag(tag string) error {
+	match := regTag.FindAllString(tag, -1)
+	if len(match) == 0 || len(match[0]) > 128 || (len(match[0]) != len(tag)) {
+		return fmt.Errorf("Invalid tag %s, tag length must be < 128, must contain [a-zA-Z0-9.-_] characters only, cannot start with '.' or '-'", tag)
+	}
+	return nil
 }

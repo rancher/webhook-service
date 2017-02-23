@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -144,10 +145,83 @@ func TestWebhookCreateAndExecuteServiceUpgrade(t *testing.T) {
 	}
 }
 
+func TestWebhookTag(t *testing.T) {
+	constructURL := fmt.Sprintf("%s/v1-webhooks/receivers?projectId=1a1", server.URL)
+	testTagsPass := []string{
+		"wh-tag",
+		"1.2.3",
+		"latest",
+		"1.2.3-alpha1",
+		"1.2.3-alpha1-pre1_rc1",
+		"1234",
+		"version",
+		"VERSION",
+		"versionLATEST123",
+		"version.latest.123-version_latest",
+		"_startsWithUnderscore"}
+
+	testTagsFail := []string{
+		"123456789123456789123456789123456789123456789123456789123456789123456789123456789123456789123456789123456789123456789123456789123456789",
+		".startsWithPeriod",
+		"-startsWithDash",
+		"$%^startsWithSpecialCharacters",
+		"Contains@#$characters",
+		"endsWith^&*(",
+		"1.2.3-alpha&"}
+
+	for id, tag := range testTagsPass {
+		name := tag + strconv.Itoa(id)
+		jsonStr := []byte(`{"driver":"serviceUpgrade","name":"` + name + `",
+			"serviceUpgradeConfig": {"serviceSelector": {"foo": "bar"}, "tag": "` + tag + `", "batchSize": 1, "intervalMillis":2,
+			"startFirst": true}}`)
+		request, err := http.NewRequest("POST", constructURL, bytes.NewBuffer(jsonStr))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		handler := HandleError(schemas, r.ConstructPayload)
+		handler.ServeHTTP(response, request)
+		if response.Code != 200 {
+			t.Fatalf("Tag is valid")
+		}
+		byID := fmt.Sprintf("%s/v1-webhooks/receivers/1?projectId=1a1", server.URL)
+		request, err = http.NewRequest("DELETE", byID, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Content-Type", "application/json")
+		response = httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		if response.Code != 204 {
+			t.Fatalf("StatusCode %d means delete failed", response.Code)
+		}
+	}
+
+	for id, tag := range testTagsFail {
+		name := tag + strconv.Itoa(id)
+		jsonStr := []byte(`{"driver":"serviceUpgrade","name":"` + name + `",
+			"serviceUpgradeConfig": {"serviceSelector": {"foo": "bar"}, "tag": "` + tag + `", "batchSize": 1, "intervalMillis":2,
+			"startFirst": true}}`)
+		request, err := http.NewRequest("POST", constructURL, bytes.NewBuffer(jsonStr))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		handler := HandleError(schemas, r.ConstructPayload)
+		handler.ServeHTTP(response, request)
+		if response.Code == 200 {
+			fmt.Println(response.Body)
+			t.Fatalf("Tag is invalid")
+		}
+	}
+}
+
 func TestWebhookInvalidBatchSizeInterval(t *testing.T) {
 	constructURL := fmt.Sprintf("%s/v1-webhooks/receivers?projectId=1a1", server.URL)
 	jsonStr := []byte(`{"driver":"serviceUpgrade","name":"wh-name",
-		"serviceUpgradeConfig": {"serviceSelector": {"foo": "bar"}, "image": "wh-image", "tag": "wh-tag", "batchSize": 0, "intervalMillis":2,
+		"serviceUpgradeConfig": {"serviceSelector": {"foo": "bar"}, "tag": "wh-tag", "batchSize": 0, "intervalMillis":2,
 		"startFirst": true}}`)
 	request, err := http.NewRequest("POST", constructURL, bytes.NewBuffer(jsonStr))
 	if err != nil {
@@ -162,7 +236,7 @@ func TestWebhookInvalidBatchSizeInterval(t *testing.T) {
 	}
 
 	jsonStr = []byte(`{"driver":"serviceUpgrade","name":"wh-name",
-		"serviceUpgradeConfig": {"serviceSelector": {"foo": "bar"}, "image": "wh-image", "tag": "wh-tag", "batchSize": 1, "intervalMillis":0,
+		"serviceUpgradeConfig": {"serviceSelector": {"foo": "bar"}, "tag": "wh-tag", "batchSize": 1, "intervalMillis":0,
 		"startFirst": true}}`)
 	request, err = http.NewRequest("POST", constructURL, bytes.NewBuffer(jsonStr))
 	if err != nil {
@@ -218,8 +292,9 @@ func (s *MockUpgradeServiceDriver) ValidatePayload(conf interface{}, apiClient *
 		return http.StatusInternalServerError, fmt.Errorf("Can't process config")
 	}
 
-	if config.Tag != s.expectedConfig.Tag {
-		return 500, fmt.Errorf("Tag. Expected %v, Actual %v", s.expectedConfig.Tag, config.Tag)
+	err := drivers.IsValidTag(config.Tag)
+	if err != nil {
+		return 400, err
 	}
 
 	if config.BatchSize != s.expectedConfig.BatchSize {
