@@ -19,7 +19,6 @@ func HandleError(s *v1client.Schemas, t func(http.ResponseWriter, *http.Request)
 		if code, err := t(rw, req); err != nil {
 			apiContext := api.GetApiContext(req)
 			logrus.Errorf("Error in request: %v", err)
-			rw.Header().Add("Content-Type", "application/json")
 			rw.WriteHeader(code)
 			writeErr := apiContext.WriteResource(&model.ServerAPIError{
 				Resource: v1client.Resource{
@@ -33,7 +32,9 @@ func HandleError(s *v1client.Schemas, t func(http.ResponseWriter, *http.Request)
 				logrus.Errorf("Failed to write err: %v", err)
 			}
 		} else {
-			rw.WriteHeader(code)
+			if code != 200 {
+				rw.WriteHeader(code)
+			}
 		}
 	}))
 }
