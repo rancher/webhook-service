@@ -101,6 +101,7 @@ func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.Ranch
 
 func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgrade, pushedImage string) {
 	var key, value string
+	var secondaryPresent, primaryPresent bool
 	serviceSelector := make(map[string]string)
 
 	for key, value = range config.ServiceSelector {
@@ -109,7 +110,6 @@ func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgra
 	batchSize := config.BatchSize
 	intervalMillis := config.IntervalMillis
 	startFirst := config.StartFirst
-
 	services, err := apiClient.Service.List(&client.ListOpts{})
 	if err != nil {
 		log.Errorf("Error %v in listing services", err)
@@ -117,26 +117,43 @@ func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgra
 	}
 
 	for _, service := range services.Data {
-		labels := service.LaunchConfig.Labels
-		val, ok := labels[key]
-		if !ok {
-			continue
+		secondaryPresent = false
+		primaryPresent = false
+		primaryLabels := service.LaunchConfig.Labels
+		secConfigs := []client.SecondaryLaunchConfig{}
+		for _, secLaunchConfig := range service.SecondaryLaunchConfigs {
+			labels := secLaunchConfig.Labels
+			val, ok := labels[key]
+			if !ok || val != value {
+				continue
+			}
+
+			secLaunchConfig.ImageUuid = "docker:" + pushedImage
+			secLaunchConfig.Labels["io.rancher.container.pull_image"] = "always"
+			secConfigs = append(secConfigs, secLaunchConfig)
+			secondaryPresent = true
 		}
 
-		if val != value {
-			continue
-		}
-
-		go func(service client.Service, apiClient *client.RancherClient) {
-			newLaunchConfig := service.LaunchConfig
+		newLaunchConfig := service.LaunchConfig
+		val, ok := primaryLabels[key]
+		if ok && val == value {
+			primaryPresent = true
 			newLaunchConfig.ImageUuid = "docker:" + pushedImage
 			newLaunchConfig.Labels["io.rancher.container.pull_image"] = "always"
+		}
+
+		if !primaryPresent && !secondaryPresent {
+			continue
+		}
+
+		go func(service client.Service, apiClient *client.RancherClient, newLaunchConfig *client.LaunchConfig, secConfigs []client.SecondaryLaunchConfig) {
 			upgradedService, err := apiClient.Service.ActionUpgrade(&service, &client.ServiceUpgrade{
 				InServiceStrategy: &client.InServiceUpgradeStrategy{
-					LaunchConfig:   newLaunchConfig,
-					BatchSize:      batchSize,
-					IntervalMillis: intervalMillis * 1000,
-					StartFirst:     startFirst,
+					LaunchConfig:           newLaunchConfig,
+					BatchSize:              batchSize,
+					IntervalMillis:         intervalMillis * 1000,
+					StartFirst:             startFirst,
+					SecondaryLaunchConfigs: secConfigs,
 				},
 			})
 			if err != nil {
@@ -158,7 +175,7 @@ func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgra
 				log.Errorf("Error %v in finishUpgrade of service %s", err, upgradedService.Id)
 				return
 			}
-		}(service, apiClient)
+		}(service, apiClient, newLaunchConfig, secConfigs)
 	}
 }
 
