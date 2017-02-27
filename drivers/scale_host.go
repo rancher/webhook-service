@@ -266,6 +266,7 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 				if err != nil {
 					return code, err
 				}
+				delIndex++
 				count++
 			}
 		} else if deleteOption == "leastRecent" {
@@ -282,6 +283,7 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 				if err != nil {
 					return code, err
 				}
+				delIndex++
 				count++
 			}
 		}
