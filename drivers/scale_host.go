@@ -68,7 +68,7 @@ func (s *ScaleHostDriver) ValidatePayload(conf interface{}, apiClient *client.Ra
 
 	if config.Action == "down" {
 		if config.DeleteOption != "mostRecent" && config.DeleteOption != "leastRecent" {
-			return http.StatusBadRequest, fmt.Errorf("Invalid delete option %v", config.DeleteOption)
+			return http.StatusBadRequest, fmt.Errorf("Invalid delete option/Delete option missing %v", config.DeleteOption)
 		}
 	}
 
@@ -172,7 +172,7 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 		// Use raw call to get host so as to get additional driver config
 		getURL := cattleURL + "/projects/" + host.AccountId + "/hosts/" + host.Id
 		log.Infof("Getting config for host %s as base host for cloning", host.Id)
-		hostRaw, err := getHosts(getURL)
+		hostRaw, err := getHosts(getURL, httpClient, cattleConfig.CattleAccessKey, cattleConfig.CattleSecretKey)
 		if err != nil {
 			return http.StatusInternalServerError, err
 		}
@@ -222,7 +222,7 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 			hostRaw["labels"] = labels
 
 			log.Infof("Creating host with hostname: %s", name)
-			code, err := createHost(hostRaw, hostCreateURL, httpClient)
+			code, err := createHost(hostRaw, hostCreateURL, httpClient, cattleConfig.CattleAccessKey, cattleConfig.CattleSecretKey)
 			if err != nil {
 				return code, err
 			}
@@ -340,9 +340,15 @@ func (s *ScaleHostDriver) CustomizeSchema(schema *v1client.Schema) *v1client.Sch
 	return schema
 }
 
-func getHosts(hostURL string) (map[string]interface{}, error) {
+func getHosts(hostURL string, httpClient *http.Client, accessKey string, secretKey string) (map[string]interface{}, error) {
 	hostsResp := make(map[string]interface{})
-	resp, err := http.Get(hostURL)
+	request, err := http.NewRequest("GET", hostURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("Error creating request to get host: %v", err)
+	}
+
+	request.SetBasicAuth(accessKey, secretKey)
+	resp, err := httpClient.Do(request)
 	if err != nil {
 		return nil, err
 	}
@@ -360,7 +366,7 @@ func getHosts(hostURL string) (map[string]interface{}, error) {
 	return hostsResp, nil
 }
 
-func createHost(host map[string]interface{}, hostCreateURL string, httpClient *http.Client) (int, error) {
+func createHost(host map[string]interface{}, hostCreateURL string, httpClient *http.Client, accessKey string, secretKey string) (int, error) {
 	hostJSON, err := json.Marshal(host)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("Error in JSON marshal of host: %v", err)
@@ -371,6 +377,7 @@ func createHost(host map[string]interface{}, hostCreateURL string, httpClient *h
 		return http.StatusInternalServerError, fmt.Errorf("Error creating request to create host: %v", err)
 	}
 
+	request.SetBasicAuth(accessKey, secretKey)
 	request.Header.Set("Content-Type", "application/json")
 	_, err = httpClient.Do(request)
 	if err != nil {
