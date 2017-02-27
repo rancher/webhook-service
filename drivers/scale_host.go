@@ -122,12 +122,12 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 	baseHostIndex = -1
 	for _, host := range hostCollection.Data {
 		labels := host.Labels
-		labelValue, ok := labels[key]
+		labelValue, ok := labels[strings.ToLower(key)]
 		if !ok {
 			continue
 		}
 
-		if labelValue != value {
+		if strings.ToLower(labelValue.(string)) != strings.ToLower(value) {
 			continue
 		}
 
