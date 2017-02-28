@@ -224,9 +224,6 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 			name := basePrefix + currNameSuffix
 			hostRaw["name"] = ""
 			hostRaw["hostname"] = name
-			labels := make(map[string]interface{})
-			labels[key] = value
-			hostRaw["labels"] = labels
 
 			log.Infof("Creating host with hostname: %s", name)
 			code, err := createHost(hostRaw, hostCreateURL, httpClient, cattleConfig.CattleAccessKey, cattleConfig.CattleSecretKey)
