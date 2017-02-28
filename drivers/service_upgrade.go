@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -123,23 +124,30 @@ func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgra
 		secConfigs := []client.SecondaryLaunchConfig{}
 		for _, secLaunchConfig := range service.SecondaryLaunchConfigs {
 			labels := secLaunchConfig.Labels
-			val, ok := labels[key]
-			if !ok || val != value {
-				continue
-			}
+			for k, v := range labels {
+				if !strings.EqualFold(k, key) {
+					continue
+				}
+				if !strings.EqualFold(v.(string), value) {
+					continue
+				}
 
-			secLaunchConfig.ImageUuid = "docker:" + pushedImage
-			secLaunchConfig.Labels["io.rancher.container.pull_image"] = "always"
-			secConfigs = append(secConfigs, secLaunchConfig)
-			secondaryPresent = true
+				secLaunchConfig.ImageUuid = "docker:" + pushedImage
+				secLaunchConfig.Labels["io.rancher.container.pull_image"] = "always"
+				secConfigs = append(secConfigs, secLaunchConfig)
+				secondaryPresent = true
+			}
 		}
 
 		newLaunchConfig := service.LaunchConfig
-		val, ok := primaryLabels[key]
-		if ok && val == value {
-			primaryPresent = true
-			newLaunchConfig.ImageUuid = "docker:" + pushedImage
-			newLaunchConfig.Labels["io.rancher.container.pull_image"] = "always"
+		for k, v := range primaryLabels {
+			if strings.EqualFold(k, key) {
+				if strings.EqualFold(v.(string), value) {
+					primaryPresent = true
+					newLaunchConfig.ImageUuid = "docker:" + pushedImage
+					newLaunchConfig.Labels["io.rancher.container.pull_image"] = "always"
+				}
+			}
 		}
 
 		if !primaryPresent && !secondaryPresent {
