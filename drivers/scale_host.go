@@ -353,6 +353,12 @@ func getHosts(hostURL string, httpClient *http.Client, accessKey string, secretK
 		return nil, err
 	}
 
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("Error %s in http.Get of host", resp.Status)
+	}
+
 	respBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
@@ -379,9 +385,15 @@ func createHost(host map[string]interface{}, hostCreateURL string, httpClient *h
 
 	request.SetBasicAuth(accessKey, secretKey)
 	request.Header.Set("Content-Type", "application/json")
-	_, err = httpClient.Do(request)
+	resp, err := httpClient.Do(request)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("Error creating host: %v", err)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		return resp.StatusCode, fmt.Errorf("Error %s in http.Post while creating host", resp.Status)
 	}
 
 	return http.StatusOK, nil
@@ -403,8 +415,8 @@ func deleteHost(hostID string, apiClient *client.RancherClient) (int, error) {
 
 func leftPad(str, pad string, length int) string {
 	for {
-		if len(str) == length {
-			return str[0:length]
+		if len(str) >= length {
+			return str[0:len(str)]
 		}
 		str = pad + str
 	}
