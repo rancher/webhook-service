@@ -146,15 +146,24 @@ func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgra
 			continue
 		}
 
-		go func(service client.Service, apiClient *client.RancherClient, newLaunchConfig *client.LaunchConfig, secConfigs []client.SecondaryLaunchConfig) {
+		go func(service client.Service, apiClient *client.RancherClient, newLaunchConfig *client.LaunchConfig,
+			secConfigs []client.SecondaryLaunchConfig, primaryPresent bool, secondaryPresent bool) {
+			upgStrategy := &client.InServiceUpgradeStrategy{
+				BatchSize:      batchSize,
+				IntervalMillis: intervalMillis * 1000,
+				StartFirst:     startFirst,
+			}
+			if primaryPresent && secondaryPresent {
+				upgStrategy.LaunchConfig = newLaunchConfig
+				upgStrategy.SecondaryLaunchConfigs = secConfigs
+			} else if primaryPresent && !secondaryPresent {
+				upgStrategy.LaunchConfig = newLaunchConfig
+			} else if !primaryPresent && secondaryPresent {
+				upgStrategy.SecondaryLaunchConfigs = secConfigs
+			}
+
 			upgradedService, err := apiClient.Service.ActionUpgrade(&service, &client.ServiceUpgrade{
-				InServiceStrategy: &client.InServiceUpgradeStrategy{
-					LaunchConfig:           newLaunchConfig,
-					BatchSize:              batchSize,
-					IntervalMillis:         intervalMillis * 1000,
-					StartFirst:             startFirst,
-					SecondaryLaunchConfigs: secConfigs,
-				},
+				InServiceStrategy: upgStrategy,
 			})
 			if err != nil {
 				log.Errorf("Error %v in upgrading service %s", err, service.Id)
@@ -175,7 +184,7 @@ func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgra
 				log.Errorf("Error %v in finishUpgrade of service %s", err, upgradedService.Id)
 				return
 			}
-		}(service, apiClient, newLaunchConfig, secConfigs)
+		}(service, apiClient, newLaunchConfig, secConfigs, primaryPresent, secondaryPresent)
 	}
 }
 
