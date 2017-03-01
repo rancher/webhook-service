@@ -43,6 +43,11 @@ func TestWebhookCreateAndExecuteServiceUpgrade(t *testing.T) {
 		t.Fatal(err)
 	}
 	wh := &model.Webhook{}
+
+	if strings.Contains(string(resp), "\\u0026") {
+		t.Fatalf("Bad execute URL, contains escaped `&` character")
+	}
+
 	err = json.Unmarshal(resp, wh)
 	if err != nil {
 		t.Fatal(err)
