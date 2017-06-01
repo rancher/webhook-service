@@ -13,9 +13,10 @@ import (
 	v1client "github.com/rancher/go-rancher/client"
 	"github.com/rancher/go-rancher/v2"
 	"github.com/rancher/webhook-service/model"
+	"github.com/ryanuber/go-glob"
 )
 
-var regTag = regexp.MustCompile(`^[\w]+[\w.-]*`)
+var regTag = regexp.MustCompile(`^[\w|\*]+[\w|\*.-]*`)
 
 type ServiceUpgradeDriver struct {
 }
@@ -89,7 +90,7 @@ func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.Ranch
 	}
 
 	pushedImage := imageName + ":" + pushedTag
-	if requestedTag != pushedTag {
+	if !glob.Glob(requestedTag, pushedTag) {
 		return http.StatusOK, nil
 	}
 
@@ -263,7 +264,7 @@ func wait(apiClient *client.RancherClient, service *client.Service) error {
 func IsValidTag(tag string) error {
 	match := regTag.FindAllString(tag, -1)
 	if len(match) == 0 || len(match[0]) > 128 || (len(match[0]) != len(tag)) {
-		return fmt.Errorf("Invalid tag %s, tag length must be < 128, must contain [a-zA-Z0-9.-_] characters only, cannot start with '.' or '-'", tag)
+		return fmt.Errorf("Invalid tag %s, tag length must be < 128, must contain [a-zA-Z0-9.-_*] characters only, cannot start with '.' or '-'", tag)
 	}
 	return nil
 }
