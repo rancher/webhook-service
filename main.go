@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
+	"syscall"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/rancher/webhook-service/drivers"
@@ -56,6 +59,26 @@ func StartWebhook(c *cli.Context) {
 	privateKey, publicKey, err := service.GetKeys(c)
 	if err != nil {
 		log.Fatal("rsa-private-key-file or rsa-public-key-file not provided, halting")
+	}
+
+	cattleParentID := os.Getenv("CATTLE_PARENT_PID")
+	if cattleParentID != "" {
+		if pid, err := strconv.Atoi(cattleParentID); err == nil {
+			go func() {
+				for {
+					process, err := os.FindProcess(pid)
+					if err != nil {
+						log.Fatalf("Failed to find process: %s\n", err)
+					} else {
+						err := process.Signal(syscall.Signal(0))
+						if err != nil {
+							log.Fatal("Parent process went away. Shutting down.")
+						}
+					}
+					time.Sleep(time.Millisecond * 250)
+				}
+			}()
+		}
 	}
 
 	rh := &service.RouteHandler{
