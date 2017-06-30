@@ -189,11 +189,17 @@ type LaunchConfig struct {
 
 	RequestedIpAddress string `json:"requestedIpAddress,omitempty" yaml:"requested_ip_address,omitempty"`
 
+	Secrets []SecretReference `json:"secrets,omitempty" yaml:"secrets,omitempty"`
+
 	SecurityOpt []string `json:"securityOpt,omitempty" yaml:"security_opt,omitempty"`
+
+	ServiceId string `json:"serviceId,omitempty" yaml:"service_id,omitempty"`
 
 	ServiceIds []string `json:"serviceIds,omitempty" yaml:"service_ids,omitempty"`
 
 	ShmSize int64 `json:"shmSize,omitempty" yaml:"shm_size,omitempty"`
+
+	StackId string `json:"stackId,omitempty" yaml:"stack_id,omitempty"`
 
 	StartCount int64 `json:"startCount,omitempty" yaml:"start_count,omitempty"`
 
@@ -226,6 +232,8 @@ type LaunchConfig struct {
 	Ulimits []Ulimit `json:"ulimits,omitempty" yaml:"ulimits,omitempty"`
 
 	User string `json:"user,omitempty" yaml:"user,omitempty"`
+
+	UserPorts []string `json:"userPorts,omitempty" yaml:"user_ports,omitempty"`
 
 	Userdata string `json:"userdata,omitempty" yaml:"userdata,omitempty"`
 
@@ -282,8 +290,6 @@ type LaunchConfigOperations interface {
 	ActionRemove(*LaunchConfig) (*Instance, error)
 
 	ActionRestart(*LaunchConfig) (*Instance, error)
-
-	ActionRestore(*LaunchConfig) (*Instance, error)
 
 	ActionStart(*LaunchConfig) (*Instance, error)
 
@@ -443,15 +449,6 @@ func (c *LaunchConfigClient) ActionRestart(resource *LaunchConfig) (*Instance, e
 	resp := &Instance{}
 
 	err := c.rancherClient.doAction(LAUNCH_CONFIG_TYPE, "restart", &resource.Resource, nil, resp)
-
-	return resp, err
-}
-
-func (c *LaunchConfigClient) ActionRestore(resource *LaunchConfig) (*Instance, error) {
-
-	resp := &Instance{}
-
-	err := c.rancherClient.doAction(LAUNCH_CONFIG_TYPE, "restore", &resource.Resource, nil, resp)
 
 	return resp, err
 }
