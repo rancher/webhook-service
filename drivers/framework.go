@@ -24,6 +24,7 @@ func RegisterDrivers() {
 	Drivers["scaleService"] = &ScaleServiceDriver{}
 	Drivers["serviceUpgrade"] = &ServiceUpgradeDriver{}
 	Drivers["scaleHost"] = &ScaleHostDriver{}
+	Drivers["scaleHostByTemplateID"] = &ScaleByHostTemplateIDDriver{}
 }
 
 //GetDriver looks up the driver

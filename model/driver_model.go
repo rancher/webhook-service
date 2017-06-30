@@ -30,3 +30,14 @@ type ScaleHost struct {
 	DeleteOption string            `json:"deleteOption,omitempty" mapstructure:"deleteOption"`
 	Type         string            `json:"type,omitempty" mapstructure:"type"`
 }
+
+//ScaleByHostTemplateID driver
+type ScaleByHostTemplateID struct {
+	HostTemplateID string `json:"hostTemplateId,omitempty" mapstructure:"hostTemplateId"`
+	Amount         int64  `json:"amount,omitempty" mapstructure:"amount"`
+	Action         string `json:"action,omitempty" mapstructure:"action"`
+	Min            int64  `json:"min,omitempty" mapstructure:"min"`
+	Max            int64  `json:"max,omitempty" mapstructure:"max"`
+	DeleteOption   string `json:"deleteOption,omitempty" mapstructure:"deleteOption"`
+	Type           string `json:"type,omitempty" mapstructure:"type"`
+}
