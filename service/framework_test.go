@@ -47,7 +47,7 @@ func init() {
 
 	HostSelector := make(map[string]string)
 	HostSelector["foo"] = "bar"
-	expectedHostConfig := model.ScaleHost{
+	expectedHostConfigLabel := model.ScaleHost{
 		Action:       "up",
 		Amount:       1,
 		HostSelector: HostSelector,
@@ -55,7 +55,17 @@ func init() {
 		Max:          4,
 		DeleteOption: "mostRecent",
 	}
-	drivers.Drivers["scaleHost"] = &MockHostDriver{expectedConfig: expectedHostConfig}
+
+	HostTemplateID := "1ht1"
+	expectedHostConfigHostTemplate := model.ScaleHost{
+		Action:         "up",
+		Amount:         1,
+		HostTemplateID: HostTemplateID,
+		Min:            1,
+		Max:            4,
+		DeleteOption:   "mostRecent",
+	}
+	drivers.Drivers["scaleHost"] = &MockHostDriver{expectedConfigLabel: expectedHostConfigLabel, expectedConfigHostTemplate: expectedHostConfigHostTemplate}
 
 	privateKey := util.ParsePrivateKey("../testutils/private.pem")
 	publicKey := util.ParsePublicKey("../testutils/public.pem")
