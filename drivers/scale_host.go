@@ -381,10 +381,10 @@ func scaleDown(hostScalingGroup []client.Host, config *model.ScaleHost, apiClien
 			}
 			badHosts[host.Id] = true
 			log.Infof("Deleting host %s with priority because of bad state: %s", host.Id, host.State)
-			code, err := deleteHost(host.Id, apiClient)
+			err := apiClient.Host.Delete(&host)
 			if err != nil {
 				log.Errorf("Cannot delete host: %v", err)
-				return code, fmt.Errorf("Cannot delete host")
+				return http.StatusInternalServerError, fmt.Errorf("Cannot delete host")
 			}
 			deleteCount++
 		}
@@ -402,10 +402,10 @@ func scaleDown(hostScalingGroup []client.Host, config *model.ScaleHost, apiClien
 				continue
 			}
 			log.Infof("Deleting host %s", host.Id)
-			code, err := deleteHost(host.Id, apiClient)
+			err := apiClient.Host.Delete(&host)
 			if err != nil {
 				log.Errorf("Cannot delete host: %v", err)
-				return code, fmt.Errorf("Cannot delete host")
+				return http.StatusInternalServerError, fmt.Errorf("Cannot delete host")
 			}
 			delIndex++
 			count++
@@ -421,10 +421,10 @@ func scaleDown(hostScalingGroup []client.Host, config *model.ScaleHost, apiClien
 				continue
 			}
 			log.Infof("Deleting host %s", host.Id)
-			code, err := deleteHost(host.Id, apiClient)
+			err := apiClient.Host.Delete(&host)
 			if err != nil {
 				log.Errorf("Cannot delete host: %v", err)
-				return code, fmt.Errorf("Cannot delete host")
+				return http.StatusInternalServerError, fmt.Errorf("Cannot delete host")
 			}
 			delIndex++
 			count++
@@ -537,20 +537,6 @@ func createHost(host map[string]interface{}, hostCreateURL string, httpClient *h
 
 	if resp.StatusCode >= 300 {
 		return resp.StatusCode, fmt.Errorf("Error %s in http.Post while creating host", resp.Status)
-	}
-
-	return http.StatusOK, nil
-}
-
-func deleteHost(hostID string, apiClient *client.RancherClient) (int, error) {
-	_, err := apiClient.ExternalHostEvent.Create(&client.ExternalHostEvent{
-		EventType:  "host.evacuate",
-		HostId:     hostID,
-		DeleteHost: true,
-	})
-
-	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("Error %v in deleting host %s", err, hostID)
 	}
 
 	return http.StatusOK, nil
