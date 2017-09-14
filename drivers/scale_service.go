@@ -74,7 +74,7 @@ func (s *ScaleServiceDriver) ValidatePayload(conf interface{}, apiClient *client
 	return http.StatusOK, nil
 }
 
-func (s *ScaleServiceDriver) Execute(conf interface{}, apiClient *client.RancherClient, requestBody interface{}) (int, error) {
+func (s *ScaleServiceDriver) Execute(conf interface{}, apiClient *client.RancherClient, requestBody interface{}, _ interface{}) (int, error) {
 	config := &model.ScaleService{}
 	err := mapstructure.Decode(conf, config)
 	if err != nil {

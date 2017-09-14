@@ -31,3 +31,8 @@ type ScaleHost struct {
 	DeleteOption   string            `json:"deleteOption,omitempty" mapstructure:"deleteOption"`
 	Type           string            `json:"type,omitempty" mapstructure:"type"`
 }
+
+type ServiceWebhook struct {
+	ServiceURL string `json:"serviceURL,omitempty" mapstructure:"serviceURL"`
+	Type       string `json:"type,omitempty" mapstructure:"type"`
+}

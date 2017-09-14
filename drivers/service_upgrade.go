@@ -50,7 +50,7 @@ func (s *ServiceUpgradeDriver) ValidatePayload(conf interface{}, apiClient *clie
 	return http.StatusOK, nil
 }
 
-func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.RancherClient, requestPayload interface{}) (int, error) {
+func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.RancherClient, requestPayload interface{}, _ interface{}) (int, error) {
 	requestBody := make(map[string]interface{})
 	config := &model.ServiceUpgrade{}
 	err := mapstructure.Decode(conf, config)

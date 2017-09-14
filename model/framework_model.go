@@ -20,6 +20,7 @@ type Webhook struct {
 	ScaleServiceConfig   ScaleService   `json:"scaleServiceConfig"`
 	ServiceUpgradeConfig ServiceUpgrade `json:"serviceUpgradeConfig"`
 	ScaleHostConfig      ScaleHost      `json:"scaleHostConfig"`
+	ServiceWebhookConfig ServiceWebhook `json:"serviceWebhookConfig"`
 }
 
 type WebhookCollection struct {
