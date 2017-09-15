@@ -61,7 +61,7 @@ func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.Ranch
 
 	requestedTag := config.Tag
 	if requestPayload == nil {
-		return http.StatusBadRequest, fmt.Errorf("No Payload recevied from Docker Hub webhook")
+		return http.StatusBadRequest, fmt.Errorf("No Payload recevied from webhook")
 	}
 
 	requestBody, ok := requestPayload.(map[string]interface{})
@@ -71,25 +71,38 @@ func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.Ranch
 
 	pushedData, ok := requestBody["push_data"]
 	if !ok {
-		return http.StatusBadRequest, fmt.Errorf("Incomplete Docker Hub webhook response provided")
+		return http.StatusBadRequest, fmt.Errorf("Incomplete webhook response provided")
 	}
 
 	pushedTag, ok := pushedData.(map[string]interface{})["tag"].(string)
 	if !ok {
-		return http.StatusBadRequest, fmt.Errorf("Docker Hub webhook response contains no tag")
+		return http.StatusBadRequest, fmt.Errorf("Webhook response contains no tag")
 	}
 
 	repository, ok := requestBody["repository"]
 	if !ok {
-		return http.StatusBadRequest, fmt.Errorf("Docker Hub response provided without repository information")
+		return http.StatusBadRequest, fmt.Errorf("Response provided without repository information")
 	}
 
-	imageName, ok := repository.(map[string]interface{})["repo_name"].(string)
-	if !ok {
-		return http.StatusBadRequest, fmt.Errorf("Docker Hub response provided without image name")
+	pushedImage := ""
+	switch config.PayloadFormat {
+	case "alicloud":
+		alicloudFullName, fullnameOk := repository.(map[string]interface{})["repo_full_name"].(string)
+		alicloudRegion, regionOk := repository.(map[string]interface{})["region"].(string)
+		if fullnameOk && regionOk {
+			imageName := "registry." + alicloudRegion + ".aliyuncs.com/" + alicloudFullName
+			pushedImage = imageName + ":" + pushedTag
+		} else {
+			return http.StatusBadRequest, fmt.Errorf("Alicloud Docker Hub response provided without image name")
+		}
+	default:
+		imageName, ok := repository.(map[string]interface{})["repo_name"].(string)
+		if !ok {
+			return http.StatusBadRequest, fmt.Errorf("Response provided without image name")
+		}
+		pushedImage = imageName + ":" + pushedTag
 	}
 
-	pushedImage := imageName + ":" + pushedTag
 	if !glob.Glob(requestedTag, pushedTag) {
 		return http.StatusOK, nil
 	}
@@ -220,7 +233,14 @@ func (s *ServiceUpgradeDriver) GetDriverConfigResource() interface{} {
 }
 
 func (s *ServiceUpgradeDriver) CustomizeSchema(schema *v1client.Schema) *v1client.Schema {
+	options := []string{"dockerhub", "alicloud"}
 	minValue := int64(1)
+
+	payloadFormat := schema.ResourceFields["payloadFormat"]
+	payloadFormat.Type = "enum"
+	payloadFormat.Options = options
+	payloadFormat.Default = options[0]
+	schema.ResourceFields["payloadFormat"] = payloadFormat
 
 	batchSize := schema.ResourceFields["batchSize"]
 	batchSize.Default = 1
