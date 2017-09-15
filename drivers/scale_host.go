@@ -26,6 +26,7 @@ var re = regexp.MustCompile("[0-9]+$")
 type ScaleHostDriver struct {
 }
 
+//ValidatePayload function should not check validation of hostSelector field, since it will be deprecated
 func (s *ScaleHostDriver) ValidatePayload(conf interface{}, apiClient *client.RancherClient) (int, error) {
 	config, ok := conf.(model.ScaleHost)
 	if !ok {
@@ -44,8 +45,18 @@ func (s *ScaleHostDriver) ValidatePayload(conf interface{}, apiClient *client.Ra
 		return http.StatusBadRequest, fmt.Errorf("Invalid amount: %v", config.Amount)
 	}
 
-	if config.HostSelector == nil {
-		return http.StatusBadRequest, fmt.Errorf("HostSelector not provided")
+	if config.HostTemplateID == "" {
+		return http.StatusBadRequest, fmt.Errorf("hostTemplateId is not provided")
+	}
+
+	hostTemplate, err := apiClient.HostTemplate.ById(config.HostTemplateID)
+	if err != nil {
+		log.Errorf("Cannot get hostTemplate resource: %v", err)
+		return http.StatusBadRequest, fmt.Errorf("Cannot get hostTemplate resource")
+	}
+
+	if hostTemplate == nil || hostTemplate.Removed != "" {
+		return http.StatusBadRequest, fmt.Errorf("hostTemplate does not exist")
 	}
 
 	if config.Min <= 0 {
@@ -77,10 +88,7 @@ func (s *ScaleHostDriver) ValidatePayload(conf interface{}, apiClient *client.Ra
 
 func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherClient, reqBody interface{}) (int, error) {
 	var currNameSuffix, baseHostName, currCloneName, suffix, key, value string
-	var count, index, newHostScale, baseHostIndex int64
-	httpClient := &http.Client{
-		Timeout: time.Second * 10,
-	}
+	var count, newHostScale, baseHostIndex int64
 
 	config := &model.ScaleHost{}
 	err := mapstructure.Decode(conf, config)
@@ -90,209 +98,338 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 
 	action := config.Action
 	amount := config.Amount
-	min := config.Min
 	max := config.Max
+
+	if config.HostTemplateID != "" { // logic for scale host with hostTemplateId
+		hostTemplate, err := apiClient.HostTemplate.ById(config.HostTemplateID)
+		if err != nil {
+			log.Errorf("Cannot get hostTemplate resource: %v", err)
+			return http.StatusBadRequest, fmt.Errorf("Cannot get hostTemplate resource")
+		}
+
+		if hostTemplate == nil || hostTemplate.Removed != "" {
+			return http.StatusBadRequest, fmt.Errorf("hostTemplate does not exist")
+		}
+
+		filters := make(map[string]interface{})
+		filters["sort"] = "created"
+		filters["order"] = "desc"
+		hostCollection, err := apiClient.Host.List(&client.ListOpts{
+			Filters: filters,
+		})
+
+		hostScalingGroup := []client.Host{}
+		baseHostIndex = -1
+		for _, host := range hostCollection.Data {
+			if host.HostTemplateId == config.HostTemplateID {
+				hostScalingGroup = append(hostScalingGroup, host)
+				if host.Driver != "" {
+					baseHostIndex = int64(len(hostScalingGroup)) - 1
+				}
+			}
+		}
+
+		if baseHostIndex == -1 {
+			baseHostName = "scaledhost"
+		} else {
+			host := hostScalingGroup[baseHostIndex]
+			if host.Name != "" {
+				baseHostName = host.Name
+			} else {
+				baseHostName = host.Hostname
+			}
+			baseHostName = strings.Split(baseHostName, ".")[0]
+		}
+
+		count = 0
+
+		if action == "up" {
+			baseSuffix := re.FindString(baseHostName)
+			basePrefix := strings.TrimRight(baseHostName, baseSuffix)
+
+			newHostScale = amount + int64(len(hostScalingGroup))
+			if newHostScale > max {
+				return http.StatusBadRequest, fmt.Errorf("Cannot scale above provided max scale value")
+			}
+
+			// Get the most recently created host with same prefix as base host, this will have largest suffix
+			suffix = ""
+			for _, currentHost := range hostScalingGroup {
+				if currentHost.Name != "" {
+					currCloneName = currentHost.Name
+				} else {
+					currCloneName = currentHost.Hostname
+				}
+
+				if !strings.Contains(currCloneName, basePrefix) {
+					continue
+				}
+
+				currCloneName = strings.Split(currCloneName, ".")[0]
+				suffix = re.FindString(currCloneName)
+				break
+			}
+
+			// if suffix exists, increment by 1, else append '2' to next clone
+			for count < amount {
+				if suffix != "" {
+					prevNumber, err := strconv.Atoi(suffix)
+					if err != nil {
+						return http.StatusInternalServerError, fmt.Errorf("Error converting %s to int in scaleHost driver: %v", suffix, err)
+					}
+					currNumber := prevNumber + 1
+					currNameSuffix = leftPad(strconv.Itoa(currNumber), "0", len(suffix))
+				} else if baseHostIndex == -1 {
+					currNameSuffix = "1" //since there is not host with the specified hostTemplateId exsited before
+				} else {
+					currNameSuffix = "2"
+				}
+
+				hst := client.Host{}
+				name := basePrefix + currNameSuffix
+				hst.Name = ""
+				hst.Hostname = name
+				hst.HostTemplateId = hostTemplate.Id
+				log.Infof("Creating host with hostname: %s", name)
+
+				_, err := apiClient.Host.Create(&hst)
+				if err != nil {
+					log.Errorf("Cannot create host: %v", err)
+					return http.StatusInternalServerError, fmt.Errorf("Cannot create host")
+				}
+
+				suffix = currNameSuffix
+				count++
+			}
+		} else if action == "down" {
+			return scaleDown(hostScalingGroup, config, apiClient)
+		}
+	} else { // logic for scale host with labels
+		httpClient := &http.Client{
+			Timeout: time.Second * 10,
+		}
+
+		hostSelector := make(map[string]string)
+		if config.HostSelector != nil {
+			for key, value = range config.HostSelector {
+				hostSelector[key] = value
+			}
+		}
+
+		cattleConfig := rConfig.GetConfig()
+		cattleURL := cattleConfig.CattleURL
+		u, err := url.Parse(cattleURL)
+		if err != nil {
+			panic(err)
+		}
+		cattleURL = strings.Split(cattleURL, u.Path)[0] + "/v2-beta"
+
+		filters := make(map[string]interface{})
+		filters["sort"] = "created"
+		filters["order"] = "desc"
+		hostCollection, err := apiClient.Host.List(&client.ListOpts{
+			Filters: filters,
+		})
+		if len(hostCollection.Data) == 0 {
+			return http.StatusBadRequest, fmt.Errorf("No hosts for scaling found")
+		}
+
+		hostScalingGroup := []client.Host{}
+		hostSelectorPresent := false
+		baseHostIndex = -1
+		for _, host := range hostCollection.Data {
+			labels := host.Labels
+			labelFound := false
+			for k, v := range labels {
+				if !strings.EqualFold(k, key) {
+					continue
+				}
+				if !strings.EqualFold(v.(string), value) {
+					continue
+				}
+				labelFound = true
+				break
+			}
+
+			if !labelFound {
+				continue
+			}
+
+			if host.State == "error" {
+				continue
+			}
+
+			hostSelectorPresent = true
+			hostScalingGroup = append(hostScalingGroup, host)
+
+			if host.Driver != "" {
+				baseHostIndex = int64(len(hostScalingGroup)) - 1
+			}
+		}
+
+		if hostSelectorPresent == false {
+			return http.StatusBadRequest, fmt.Errorf("No host with label %v exists", hostSelector)
+		}
+
+		if baseHostIndex == -1 && action == "up" {
+			return http.StatusBadRequest, fmt.Errorf("Cannot use custom hosts for scaling up")
+		}
+
+		count = 0
+
+		if action == "up" {
+			// Consider the least recently created as base host for cloning
+			// Remove domain from host name, scaleHost12.foo.com becomes scaleHost12
+			// Remove largest number suffix from end, scaleHost12 becomes scaleHost
+			// Name has precedence over hostname. If name is set, empty this field for the clones
+			host := hostScalingGroup[baseHostIndex]
+			if host.Name != "" {
+				baseHostName = host.Name
+			} else {
+				baseHostName = host.Hostname
+			}
+			baseHostName = strings.Split(baseHostName, ".")[0]
+			baseSuffix := re.FindString(baseHostName)
+			basePrefix := strings.TrimRight(baseHostName, baseSuffix)
+
+			// Use raw call to get host so as to get additional driver config
+			getURL := cattleURL + "/projects/" + host.AccountId + "/hosts/" + host.Id
+			log.Infof("Getting config for host %s as base host for cloning", host.Id)
+
+			hostRaw, err := getHosts(getURL, httpClient, cattleConfig.CattleAccessKey, cattleConfig.CattleSecretKey)
+			if err != nil {
+				return http.StatusInternalServerError, err
+			}
+
+			hostCreateURL := cattleURL + "/projects/" + host.AccountId + "/hosts"
+			newHostScale = amount + int64(len(hostScalingGroup))
+			if newHostScale > max {
+				return http.StatusBadRequest, fmt.Errorf("Cannot scale above provided max scale value")
+			}
+
+			// Get the most recently created host with same prefix as base host, this will have largest suffix
+			suffix = ""
+			for _, currentHost := range hostScalingGroup {
+				if currentHost.Name != "" {
+					currCloneName = currentHost.Name
+				} else {
+					currCloneName = currentHost.Hostname
+				}
+
+				if !strings.Contains(currCloneName, basePrefix) {
+					continue
+				}
+
+				currCloneName = strings.Split(currCloneName, ".")[0]
+				suffix = re.FindString(currCloneName)
+				break
+			}
+
+			// if suffix exists, increment by 1, else append '2' to next clone
+			for count < amount {
+				if suffix != "" {
+					prevNumber, err := strconv.Atoi(suffix)
+					if err != nil {
+						return http.StatusInternalServerError, fmt.Errorf("Error converting %s to int in scaleHost driver: %v", suffix, err)
+					}
+					currNumber := prevNumber + 1
+					currNameSuffix = leftPad(strconv.Itoa(currNumber), "0", len(suffix))
+				} else {
+					currNameSuffix = "2"
+				}
+
+				name := basePrefix + currNameSuffix
+				hostRaw["name"] = ""
+				hostRaw["hostname"] = name
+
+				log.Infof("Creating host with hostname: %s", name)
+				code, err := createHost(hostRaw, hostCreateURL, httpClient, cattleConfig.CattleAccessKey, cattleConfig.CattleSecretKey)
+				if err != nil {
+					log.Errorf("Cannot create host: %v", err)
+					return code, fmt.Errorf("Cannot create host")
+				}
+
+				suffix = currNameSuffix
+				count++
+			}
+		} else if action == "down" {
+			return scaleDown(hostScalingGroup, config, apiClient)
+		}
+	}
+
+	return http.StatusOK, nil
+}
+
+func scaleDown(hostScalingGroup []client.Host, config *model.ScaleHost, apiClient *client.RancherClient) (int, error) {
+	amount := config.Amount
+	min := config.Min
 	deleteOption := config.DeleteOption
 
-	hostSelector := make(map[string]string)
-	for key, value = range config.HostSelector {
-		hostSelector[key] = value
+	var newHostScale int64
+	newHostScale = int64(len(hostScalingGroup)) - amount
+	if newHostScale < min {
+		return http.StatusBadRequest, fmt.Errorf("Cannot scale below provided min scale value")
 	}
 
-	cattleConfig := rConfig.GetConfig()
-	cattleURL := cattleConfig.CattleURL
-	u, err := url.Parse(cattleURL)
-	if err != nil {
-		panic(err)
-	}
-	cattleURL = strings.Split(cattleURL, u.Path)[0] + "/v2-beta"
-
-	filters := make(map[string]interface{})
-	filters["sort"] = "created"
-	filters["order"] = "desc"
-	hostCollection, err := apiClient.Host.List(&client.ListOpts{
-		Filters: filters,
-	})
-	if len(hostCollection.Data) == 0 {
-		return http.StatusBadRequest, fmt.Errorf("No hosts for scaling found")
-	}
-
-	hostScalingGroup := []client.Host{}
-	hostSelectorPresent := false
-	baseHostIndex = -1
-	for _, host := range hostCollection.Data {
-		labels := host.Labels
-		labelFound := false
-		for k, v := range labels {
-			if !strings.EqualFold(k, key) {
-				continue
+	badHosts := make(map[string]bool)
+	deleteCount := int64(0)
+	for _, host := range hostScalingGroup {
+		state := host.State
+		if state == "inactive" || state == "deactivating" || state == "reconnecting" || state == "disconnected" {
+			if deleteCount >= amount {
+				return http.StatusBadRequest, fmt.Errorf("Cannot scale down exceed amount")
 			}
-			if !strings.EqualFold(v.(string), value) {
-				continue
-			}
-			labelFound = true
-			break
-		}
-
-		if !labelFound {
-			continue
-		}
-
-		if host.State == "error" {
-			continue
-		}
-
-		hostSelectorPresent = true
-		hostScalingGroup = append(hostScalingGroup, host)
-
-		if host.Driver != "" {
-			baseHostIndex++
-		}
-	}
-
-	if hostSelectorPresent == false {
-		return http.StatusBadRequest, fmt.Errorf("No host with label %v exists", hostSelector)
-	}
-
-	if baseHostIndex == -1 && action == "up" {
-		return http.StatusBadRequest, fmt.Errorf("Cannot use custom hosts for scaling up")
-	}
-
-	count = 0
-
-	if action == "up" {
-		// Consider the least recently created as base host for cloning
-		// Remove domain from host name, scaleHost12.foo.com becomes scaleHost12
-		// Remove largest number suffix from end, scaleHost12 becomes scaleHost
-		// Name has precedence over hostname. If name is set, empty this field for the clones
-		host := hostScalingGroup[baseHostIndex]
-		if host.Name != "" {
-			baseHostName = host.Name
-			host.Name = ""
-		} else {
-			baseHostName = host.Hostname
-		}
-		baseHostName = strings.Split(baseHostName, ".")[0]
-		baseSuffix := re.FindString(baseHostName)
-		basePrefix := strings.TrimRight(baseHostName, baseSuffix)
-
-		// Use raw call to get host so as to get additional driver config
-		getURL := cattleURL + "/projects/" + host.AccountId + "/hosts/" + host.Id
-		log.Infof("Getting config for host %s as base host for cloning", host.Id)
-		hostRaw, err := getHosts(getURL, httpClient, cattleConfig.CattleAccessKey, cattleConfig.CattleSecretKey)
-		if err != nil {
-			return http.StatusInternalServerError, err
-		}
-
-		hostCreateURL := cattleURL + "/projects/" + host.AccountId + "/hosts"
-		newHostScale = amount + int64(len(hostScalingGroup))
-		if newHostScale > max {
-			return http.StatusBadRequest, fmt.Errorf("Cannot scale above provided max scale value")
-		}
-
-		// Get the most recently created host with same prefix as base host, this will have largest suffix
-		suffix = ""
-		for _, currentHost := range hostScalingGroup {
-			if currentHost.Name != "" {
-				currCloneName = currentHost.Name
-			} else {
-				currCloneName = currentHost.Hostname
-			}
-
-			if !strings.Contains(currCloneName, basePrefix) {
-				continue
-			}
-
-			currCloneName = strings.Split(currCloneName, ".")[0]
-			suffix = re.FindString(currCloneName)
-			break
-		}
-
-		// if suffix exists, increment by 1, else append '2' to next clone
-		for count < amount {
-			if suffix != "" {
-				prevNumber, err := strconv.Atoi(suffix)
-				if err != nil {
-					return http.StatusInternalServerError, fmt.Errorf("Error converting %s to int in scaleHost driver: %v", suffix, err)
-				}
-				currNumber := prevNumber + 1
-				currNameSuffix = leftPad(strconv.Itoa(currNumber), "0", len(suffix))
-			} else {
-				currNameSuffix = "2"
-			}
-
-			name := basePrefix + currNameSuffix
-			hostRaw["name"] = ""
-			hostRaw["hostname"] = name
-
-			log.Infof("Creating host with hostname: %s", name)
-			code, err := createHost(hostRaw, hostCreateURL, httpClient, cattleConfig.CattleAccessKey, cattleConfig.CattleSecretKey)
+			badHosts[host.Id] = true
+			log.Infof("Deleting host %s with priority because of bad state: %s", host.Id, host.State)
+			code, err := deleteHost(host.Id, apiClient)
 			if err != nil {
-				return code, err
+				log.Errorf("Cannot delete host: %v", err)
+				return code, fmt.Errorf("Cannot delete host")
 			}
+			deleteCount++
+		}
+	}
 
-			suffix = currNameSuffix
+	count := int64(0)
+	delIndex := count
+	amount -= deleteCount
+	if deleteOption == "mostRecent" {
+		log.Infof("Deleting most recently created hosts")
+		for count < amount {
+			host := hostScalingGroup[delIndex]
+			if badHosts[host.Id] {
+				delIndex++
+				continue
+			}
+			log.Infof("Deleting host %s", host.Id)
+			code, err := deleteHost(host.Id, apiClient)
+			if err != nil {
+				log.Errorf("Cannot delete host: %v", err)
+				return code, fmt.Errorf("Cannot delete host")
+			}
+			delIndex++
 			count++
 		}
-	} else if action == "down" {
-		newHostScale = int64(len(hostScalingGroup)) - amount
-		if newHostScale < min {
-			return http.StatusBadRequest, fmt.Errorf("Cannot scale below provided min scale value")
-		}
-
-		badHosts := make(map[string]bool)
-		deleteCount := int64(0)
-		for _, host := range hostScalingGroup {
-			state := host.State
-			if state == "inactive" || state == "deactivating" || state == "reconnecting" || state == "disconnected" {
-				badHosts[host.Id] = true
-				log.Infof("Deleting host %s with priority because of bad state: %s", host.Id, host.State)
-				code, err := deleteHost(host.Id, apiClient)
-				if err != nil {
-					return code, err
-				}
-				deleteCount++
-			}
-		}
-
-		amount -= deleteCount
-		delIndex := count
-		if deleteOption == "mostRecent" {
-			log.Infof("Deleting most recently created hosts")
-			for count < amount {
-				host := hostScalingGroup[delIndex]
-				if badHosts[host.Id] {
-					delIndex++
-					continue
-				}
-				log.Infof("Deleting host %s", host.Id)
-				code, err := deleteHost(host.Id, apiClient)
-				if err != nil {
-					return code, err
-				}
+	} else if deleteOption == "leastRecent" {
+		log.Infof("Deleting least recently created hosts")
+		index := int64(0)
+		for count < amount {
+			index = (int64(len(hostScalingGroup)) - delIndex) - 1
+			host := hostScalingGroup[index]
+			if badHosts[host.Id] {
 				delIndex++
-				count++
+				continue
 			}
-		} else if deleteOption == "leastRecent" {
-			log.Infof("Deleting least recently created hosts")
-			for count < amount {
-				index = (int64(len(hostScalingGroup)) - delIndex) - 1
-				host := hostScalingGroup[index]
-				if badHosts[host.Id] {
-					delIndex++
-					continue
-				}
-				log.Infof("Deleting host %s", host.Id)
-				code, err := deleteHost(host.Id, apiClient)
-				if err != nil {
-					return code, err
-				}
-				delIndex++
-				count++
+			log.Infof("Deleting host %s", host.Id)
+			code, err := deleteHost(host.Id, apiClient)
+			if err != nil {
+				log.Errorf("Cannot delete host: %v", err)
+				return code, fmt.Errorf("Cannot delete host")
 			}
+			delIndex++
+			count++
 		}
 	}
-
 	return http.StatusOK, nil
 }
 

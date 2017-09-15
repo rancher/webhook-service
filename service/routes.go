@@ -99,7 +99,11 @@ func driverSchemas() *v1client.Schemas {
 			driverConfig := schemas.AddType(key, value.GetDriverConfigResource())
 			driverConfig.CollectionMethods = []string{}
 			for k, f := range driverConfig.ResourceFields {
-				f.Create = true
+				if k == "hostSelector" {
+					f.Create = false
+				} else {
+					f.Create = true
+				}
 				driverConfig.ResourceFields[k] = f
 			}
 			driverConfig = value.CustomizeSchema(driverConfig)

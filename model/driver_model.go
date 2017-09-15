@@ -14,6 +14,7 @@ type ScaleService struct {
 type ServiceUpgrade struct {
 	ServiceSelector map[string]string `json:"serviceSelector,omitempty" mapstructure:"serviceSelector"`
 	Tag             string            `json:"tag,omitempty" mapstructure:"tag"`
+	PayloadFormat   string            `json:"payloadFormat,omitempty" mapstructure:"payloadFormat"`
 	BatchSize       int64             `json:"batchSize,omitempty" mapstructure:"batchSize"`
 	IntervalMillis  int64             `json:"intervalMillis,omitempty" mapstructure:"intervalMillis"`
 	StartFirst      bool              `json:"startFirst,omitempty" mapstructure:"startFirst"`
@@ -22,11 +23,12 @@ type ServiceUpgrade struct {
 
 //ScaleHost driver
 type ScaleHost struct {
-	HostSelector map[string]string `json:"hostSelector,omitempty" mapstructure:"hostSelector"`
-	Amount       int64             `json:"amount,omitempty" mapstructure:"amount"`
-	Action       string            `json:"action,omitempty" mapstructure:"action"`
-	Min          int64             `json:"min,omitempty" mapstructure:"min"`
-	Max          int64             `json:"max,omitempty" mapstructure:"max"`
-	DeleteOption string            `json:"deleteOption,omitempty" mapstructure:"deleteOption"`
-	Type         string            `json:"type,omitempty" mapstructure:"type"`
+	HostSelector   map[string]string `json:"hostSelector,omitempty" mapstructure:"hostSelector"`
+	HostTemplateID string            `json:"hostTemplateId,omitempty" mapstructure:"hostTemplateId"`
+	Amount         int64             `json:"amount,omitempty" mapstructure:"amount"`
+	Action         string            `json:"action,omitempty" mapstructure:"action"`
+	Min            int64             `json:"min,omitempty" mapstructure:"min"`
+	Max            int64             `json:"max,omitempty" mapstructure:"max"`
+	DeleteOption   string            `json:"deleteOption,omitempty" mapstructure:"deleteOption"`
+	Type           string            `json:"type,omitempty" mapstructure:"type"`
 }
