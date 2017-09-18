@@ -2,7 +2,6 @@ package drivers
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -32,15 +31,13 @@ func (s *ServiceWebhookDriver) ValidatePayload(conf interface{}, apiClient *clie
 }
 
 func (s *ServiceWebhookDriver) Execute(conf interface{}, apiClient *client.RancherClient, requestPayload interface{}, req interface{}) (int, error) {
+	log.Debugf("_____Excute requestPayload %v, ____", requestPayload)
+	requestPayloadByte := requestPayload.([]byte)
 	rancherConfig := config.GetConfig()
 	webhookConfig := &model.ServiceWebhook{}
 	err := mapstructure.Decode(conf, webhookConfig)
 	if err != nil {
 		return http.StatusInternalServerError, errors.Wrap(err, "Couldn't unmarshal config")
-	}
-	requestBody, err := json.Marshal(requestPayload)
-	if err != nil {
-		return http.StatusBadRequest, fmt.Errorf("Body should be of type map[string]interface{}")
 	}
 	originRequest := req.(*http.Request)
 
@@ -50,7 +47,8 @@ func (s *ServiceWebhookDriver) Execute(conf interface{}, apiClient *client.Ranch
 		postURL += "?" + arry[1]
 	}
 	log.Debugf("_____Excute postURL %v, ____", postURL)
-	request, err := http.NewRequest("POST", postURL, bytes.NewBuffer(requestBody))
+	log.Debugf("_____Excute requestPayloadByte %v, ____", requestPayloadByte)
+	request, err := http.NewRequest("POST", postURL, bytes.NewBuffer(requestPayloadByte))
 	if err != nil {
 		log.Errorf("fail:%v", err)
 		return 500, err
@@ -66,7 +64,8 @@ func (s *ServiceWebhookDriver) Execute(conf interface{}, apiClient *client.Ranch
 	}
 
 	log.Debugf("_____Excute request %v, ____", request)
-	log.Debugf("_____Excute paylod %v, ____", requestBody)
+
+	log.Debugf("_____Excute requestBody %v, ____", originRequest.Body)
 	log.Debugf("Excute config %v", webhookConfig)
 
 	respBody, err := ioutil.ReadAll(rep.Body)

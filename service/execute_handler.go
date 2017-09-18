@@ -13,6 +13,7 @@ import (
 
 func (rh *RouteHandler) Execute(w http.ResponseWriter, r *http.Request) (int, error) {
 	var requestBody interface{}
+	var bytes []byte
 	if r.Body != nil {
 		bytes, err := ioutil.ReadAll(r.Body)
 		if err != nil {
@@ -29,7 +30,7 @@ func (rh *RouteHandler) Execute(w http.ResponseWriter, r *http.Request) (int, er
 
 	jwtSigned := r.FormValue("token")
 	if jwtSigned != "" {
-		code, err := rh.ExecuteWithJwt(jwtSigned, requestBody, r)
+		code, err := rh.ExecuteWithJwt(jwtSigned, bytes, r)
 		if err != nil {
 			return code, err
 		}
@@ -46,7 +47,7 @@ func (rh *RouteHandler) Execute(w http.ResponseWriter, r *http.Request) (int, er
 		return 400, fmt.Errorf("Invalid execute url, url must contain projectId")
 	}
 
-	code, err := rh.ExecuteWithKey(uuid, projectID, requestBody, r)
+	code, err := rh.ExecuteWithKey(uuid, projectID, bytes, r)
 	if err != nil {
 		return code, err
 	}

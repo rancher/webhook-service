@@ -1,6 +1,7 @@
 package drivers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -51,9 +52,16 @@ func (s *ServiceUpgradeDriver) ValidatePayload(conf interface{}, apiClient *clie
 }
 
 func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.RancherClient, requestPayload interface{}, _ interface{}) (int, error) {
-	requestBody := make(map[string]interface{})
+	requestPayloadByte := requestPayload.([]byte)
+
+	var requestBodyInterface interface{}
+
+	err := json.Unmarshal(requestPayloadByte, &requestBodyInterface)
+	if err != nil {
+		return 500, fmt.Errorf("Error unmarshalling request body in Execute handler: %v", err)
+	}
 	config := &model.ServiceUpgrade{}
-	err := mapstructure.Decode(conf, config)
+	err = mapstructure.Decode(conf, config)
 	if err != nil {
 		return http.StatusInternalServerError, errors.Wrap(err, "Couldn't unmarshal config")
 	}
@@ -63,7 +71,7 @@ func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.Ranch
 		return http.StatusBadRequest, fmt.Errorf("No Payload recevied from Docker Hub webhook")
 	}
 
-	requestBody, ok := requestPayload.(map[string]interface{})
+	requestBody, ok := requestBodyInterface.(map[string]interface{})
 	if !ok {
 		return http.StatusBadRequest, fmt.Errorf("Body should be of type map[string]interface{}")
 	}
