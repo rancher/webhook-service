@@ -29,7 +29,7 @@ func (rh *RouteHandler) Execute(w http.ResponseWriter, r *http.Request) (int, er
 
 	jwtSigned := r.FormValue("token")
 	if jwtSigned != "" {
-		code, err := rh.ExecuteWithJwt(jwtSigned, requestBody, r.Header)
+		code, err := rh.ExecuteWithJwt(jwtSigned, requestBody, r)
 		if err != nil {
 			return code, err
 		}
@@ -46,7 +46,7 @@ func (rh *RouteHandler) Execute(w http.ResponseWriter, r *http.Request) (int, er
 		return 400, fmt.Errorf("Invalid execute url, url must contain projectId")
 	}
 
-	code, err := rh.ExecuteWithKey(uuid, projectID, requestBody, r.Header)
+	code, err := rh.ExecuteWithKey(uuid, projectID, requestBody, r)
 	if err != nil {
 		return code, err
 	}
@@ -54,7 +54,7 @@ func (rh *RouteHandler) Execute(w http.ResponseWriter, r *http.Request) (int, er
 	return 200, nil
 }
 
-func (rh *RouteHandler) ExecuteWithJwt(jwtSigned string, requestBody interface{}, requestHeader interface{}) (int, error) {
+func (rh *RouteHandler) ExecuteWithJwt(jwtSigned string, requestBody interface{}, request interface{}) (int, error) {
 	token, err := jwt.Parse(jwtSigned, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
@@ -97,7 +97,7 @@ func (rh *RouteHandler) ExecuteWithJwt(jwtSigned string, requestBody interface{}
 			return code, err
 		}
 
-		responseCode, err := driver.Execute(claims["config"], apiClient, requestBody, requestHeader)
+		responseCode, err := driver.Execute(claims["config"], apiClient, requestBody, request)
 		if err != nil {
 			return responseCode, fmt.Errorf("Error %v in executing driver for %s", err, driverID)
 		}
@@ -105,7 +105,7 @@ func (rh *RouteHandler) ExecuteWithJwt(jwtSigned string, requestBody interface{}
 	return 200, nil
 }
 
-func (rh *RouteHandler) ExecuteWithKey(uuid string, projectID string, requestBody interface{}, requestHeader interface{}) (int, error) {
+func (rh *RouteHandler) ExecuteWithKey(uuid string, projectID string, requestBody interface{}, request interface{}) (int, error) {
 	apiClient, err := rh.ClientFactory.GetClient(projectID)
 	if err != nil {
 		return 500, err
@@ -140,7 +140,7 @@ func (rh *RouteHandler) ExecuteWithKey(uuid string, projectID string, requestBod
 		return 400, fmt.Errorf("Driver config not found")
 	}
 
-	responseCode, err := driver.Execute(driverConfig, apiClient, requestBody, requestHeader)
+	responseCode, err := driver.Execute(driverConfig, apiClient, requestBody, request)
 	if err != nil {
 		return responseCode, fmt.Errorf("Error %v in executing driver for %s", err, driverID)
 	}
