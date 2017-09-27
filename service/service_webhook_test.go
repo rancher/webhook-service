@@ -144,22 +144,18 @@ type MockServiceWebhookDriver struct {
 	expectedConfig model.ServiceWebhook
 }
 
-func (s *MockServiceWebhookDriver) Execute(conf interface{}, apiClient *client.RancherClient, payload interface{}, req interface{}) (int, error) {
+func (s *MockServiceWebhookDriver) Execute(conf interface{}, apiClient *client.RancherClient, req interface{}) (int, error) {
 	config := &model.ServiceWebhook{}
-	requestBody := make(map[string]interface{})
 	request := make(map[string]interface{})
 	err := mapstructure.Decode(conf, config)
 
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("Couldn't unmarshal config: %v", err)
 	}
-	requestBody, ok := payload.(map[string]interface{})
+	request, ok := req.(map[string]interface{})
 	if ok {
 	}
-	request, ok = req.(map[string]interface{})
-	if ok {
-	}
-	logrus.Infof("%v, %v", request, requestBody)
+	logrus.Infof("%v", request)
 	if config.ServiceURL != s.expectedConfig.ServiceURL {
 		return 500, fmt.Errorf("Tag. Expected %v, Actual %v", s.expectedConfig.ServiceURL, config.ServiceURL)
 	}

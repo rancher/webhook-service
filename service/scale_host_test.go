@@ -487,7 +487,7 @@ type MockHostDriver struct {
 	expectedConfigHostTemplate model.ScaleHost
 }
 
-func (s *MockHostDriver) Execute(conf interface{}, apiClient *client.RancherClient, reqbody interface{}, _ interface{}) (int, error) {
+func (s *MockHostDriver) Execute(conf interface{}, apiClient *client.RancherClient, req interface{}) (int, error) {
 	config := &model.ScaleHost{}
 	err := mapstructure.Decode(conf, config)
 	if err != nil {

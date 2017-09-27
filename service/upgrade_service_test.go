@@ -260,7 +260,7 @@ type MockUpgradeServiceDriver struct {
 	expectedConfig model.ServiceUpgrade
 }
 
-func (s *MockUpgradeServiceDriver) Execute(conf interface{}, apiClient *client.RancherClient, payload interface{}, _ interface{}) (int, error) {
+func (s *MockUpgradeServiceDriver) Execute(conf interface{}, apiClient *client.RancherClient, request interface{}) (int, error) {
 	config := &model.ServiceUpgrade{}
 	err := mapstructure.Decode(conf, config)
 	if err != nil {

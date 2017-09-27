@@ -30,56 +30,56 @@ func (s *ServiceWebhookDriver) ValidatePayload(conf interface{}, apiClient *clie
 	return http.StatusOK, nil
 }
 
-func (s *ServiceWebhookDriver) Execute(conf interface{}, apiClient *client.RancherClient, requestPayload interface{}, req interface{}) (int, error) {
-	log.Debugf("_____Excute requestPayload %v, ____", requestPayload)
-	requestPayloadByte := requestPayload.([]byte)
+func (s *ServiceWebhookDriver) Execute(conf interface{}, apiClient *client.RancherClient, request interface{}) (int, error) {
+
+	r := request.(*http.Request)
+	requestPayloadByte, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return 500, err
+	}
 	rancherConfig := config.GetConfig()
 	webhookConfig := &model.ServiceWebhook{}
-	err := mapstructure.Decode(conf, webhookConfig)
-	if err != nil {
+	if err = mapstructure.Decode(conf, webhookConfig); err != nil {
 		return http.StatusInternalServerError, errors.Wrap(err, "Couldn't unmarshal config")
 	}
-	originRequest := req.(*http.Request)
 
-	arry := strings.Split(originRequest.RequestURI, "?")
+	arry := strings.Split(r.RequestURI, "?")
 	postURL := webhookConfig.ServiceURL
 	if arry[1] != "" {
 		postURL += "?" + arry[1]
 	}
 	log.Debugf("_____Excute postURL %v, ____", postURL)
 	log.Debugf("_____Excute requestPayloadByte %v, ____", requestPayloadByte)
-	request, err := http.NewRequest("POST", postURL, bytes.NewBuffer(requestPayloadByte))
+	hopRequest, err := http.NewRequest("POST", postURL, bytes.NewBuffer(requestPayloadByte))
 	if err != nil {
 		log.Errorf("fail:%v", err)
-		return 500, err
+		return http.StatusInternalServerError, err
 	}
 
 	client := &http.Client{}
-	request.Header = originRequest.Header
-	request.SetBasicAuth(rancherConfig.CattleAccessKey, rancherConfig.CattleSecretKey)
-	rep, err := client.Do(request)
+	hopRequest.Header = r.Header
+	hopRequest.SetBasicAuth(rancherConfig.CattleAccessKey, rancherConfig.CattleSecretKey)
+	resp, err := client.Do(hopRequest)
 	if err != nil {
-		log.Errorf("fail:%v", err)
-		return 500, err
+		log.Errorf("Error sending request to service:%v", err)
+		return http.StatusInternalServerError, err
 	}
 
 	log.Debugf("_____Excute request %v, ____", request)
-
-	log.Debugf("_____Excute requestBody %v, ____", originRequest.Body)
 	log.Debugf("Excute config %v", webhookConfig)
 
-	respBody, err := ioutil.ReadAll(rep.Body)
+	respBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Errorf("get response from service error:%v", err)
-		return 500, err
+		log.Errorf("read from response body error:%v", err)
+		return http.StatusInternalServerError, err
 	}
-	if rep.StatusCode != 200 {
-		log.Errorf("Excute error resp %v,%v", rep.StatusCode, string(respBody))
-		return rep.StatusCode, errors.New(string(respBody))
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		log.Debugf("Response StatusCode: %v,Error: %v", resp.StatusCode, string(respBody))
+		return resp.StatusCode, errors.New(string(respBody))
 	}
-	log.Debugf("Excute resp %v", string(respBody))
-	defer rep.Body.Close()
-	return 200, nil
+	log.Debugf("Response StatusCode: %v,Error: %v", resp.StatusCode, string(respBody))
+	return resp.StatusCode, nil
 }
 
 func (s *ServiceWebhookDriver) ConvertToConfigAndSetOnWebhook(conf interface{}, webhook *model.Webhook) error {

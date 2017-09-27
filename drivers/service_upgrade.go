@@ -3,6 +3,7 @@ package drivers
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strings"
@@ -51,15 +52,24 @@ func (s *ServiceUpgradeDriver) ValidatePayload(conf interface{}, apiClient *clie
 	return http.StatusOK, nil
 }
 
-func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.RancherClient, requestPayload interface{}, _ interface{}) (int, error) {
-	requestPayloadByte := requestPayload.([]byte)
+func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.RancherClient, request interface{}) (int, error) {
+	r := request.(*http.Request)
+	var requestPayload interface{}
+	var err error
+	if r.Body != nil {
+		bytes, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			return http.StatusInternalServerError, fmt.Errorf("Error reading request body in Execute handler: %v", err)
+		}
 
-	var requestBodyInterface interface{}
-
-	err := json.Unmarshal(requestPayloadByte, &requestBodyInterface)
-	if err != nil {
-		return 500, fmt.Errorf("Error unmarshalling request body in Execute handler: %v", err)
+		if len(bytes) > 0 {
+			err = json.Unmarshal(bytes, &requestPayload)
+			if err != nil {
+				return http.StatusInternalServerError, fmt.Errorf("Error unmarshalling request body in Execute handler: %v", err)
+			}
+		}
 	}
+
 	config := &model.ServiceUpgrade{}
 	err = mapstructure.Decode(conf, config)
 	if err != nil {
@@ -71,7 +81,7 @@ func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.Ranch
 		return http.StatusBadRequest, fmt.Errorf("No Payload recevied from Docker Hub webhook")
 	}
 
-	requestBody, ok := requestBodyInterface.(map[string]interface{})
+	requestBody, ok := requestPayload.(map[string]interface{})
 	if !ok {
 		return http.StatusBadRequest, fmt.Errorf("Body should be of type map[string]interface{}")
 	}
