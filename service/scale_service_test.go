@@ -271,7 +271,7 @@ type MockServiceDriver struct {
 	expectedConfig model.ScaleService
 }
 
-func (s *MockServiceDriver) Execute(conf interface{}, apiClient *client.RancherClient, payload interface{}) (int, error) {
+func (s *MockServiceDriver) Execute(conf interface{}, apiClient *client.RancherClient, req interface{}) (int, error) {
 	config := &model.ScaleService{}
 	err := mapstructure.Decode(conf, config)
 	if err != nil {

@@ -86,7 +86,7 @@ func (s *ScaleHostDriver) ValidatePayload(conf interface{}, apiClient *client.Ra
 	return http.StatusOK, nil
 }
 
-func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherClient, reqBody interface{}) (int, error) {
+func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherClient, request interface{}) (int, error) {
 	var currNameSuffix, baseHostName, currCloneName, suffix, key, value string
 	var count, newHostScale, baseHostIndex int64
 

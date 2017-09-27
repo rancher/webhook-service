@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/Sirupsen/logrus"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/rancher/webhook-service/drivers"
 	"github.com/rancher/webhook-service/service"
@@ -14,6 +16,7 @@ import (
 var VERSION = "v0.0.0-dev"
 
 func main() {
+	logrus.SetLevel(logrus.DebugLevel)
 	app := cli.NewApp()
 	app.Name = "webhook-service"
 	app.Version = VERSION

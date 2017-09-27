@@ -67,6 +67,11 @@ func init() {
 	}
 	drivers.Drivers["scaleHost"] = &MockHostDriver{expectedConfigLabel: expectedHostConfigLabel, expectedConfigHostTemplate: expectedHostConfigHostTemplate}
 
+	expectedServiceWebhookTemplate := model.ServiceWebhook{
+		ServiceURL: "http",
+	}
+	drivers.Drivers["serviceWebhook"] = &MockServiceWebhookDriver{expectedConfig: expectedServiceWebhookTemplate}
+
 	privateKey := util.ParsePrivateKey("../testutils/private.pem")
 	publicKey := util.ParsePublicKey("../testutils/public.pem")
 	r = &RouteHandler{
