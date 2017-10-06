@@ -15,8 +15,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
-	v1client "github.com/rancher/go-rancher/client"
-	"github.com/rancher/go-rancher/v2"
+	"github.com/rancher/go-rancher/v3"
 	rConfig "github.com/rancher/webhook-service/config"
 	"github.com/rancher/webhook-service/model"
 )
@@ -244,7 +243,7 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 				if !strings.EqualFold(k, key) {
 					continue
 				}
-				if !strings.EqualFold(v.(string), value) {
+				if !strings.EqualFold(v, value) {
 					continue
 				}
 				labelFound = true
@@ -293,7 +292,8 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 			basePrefix := strings.TrimRight(baseHostName, baseSuffix)
 
 			// Use raw call to get host so as to get additional driver config
-			getURL := cattleURL + "/projects/" + host.AccountId + "/hosts/" + host.Id
+			//Todo: figure out how to retrieve host.id
+			getURL := cattleURL + "/projects/" + "" + "/hosts/" + host.Id
 			log.Infof("Getting config for host %s as base host for cloning", host.Id)
 
 			hostRaw, err := getHosts(getURL, httpClient, cattleConfig.CattleAccessKey, cattleConfig.CattleSecretKey)
@@ -301,7 +301,8 @@ func (s *ScaleHostDriver) Execute(conf interface{}, apiClient *client.RancherCli
 				return http.StatusInternalServerError, err
 			}
 
-			hostCreateURL := cattleURL + "/projects/" + host.AccountId + "/hosts"
+			//Todo: figure out url
+			hostCreateURL := cattleURL + "/projects/" + "" + "/hosts"
 			newHostScale = amount + int64(len(hostScalingGroup))
 			if newHostScale > max {
 				return http.StatusBadRequest, fmt.Errorf("Cannot scale above provided max scale value")
@@ -455,7 +456,7 @@ func (s *ScaleHostDriver) GetDriverConfigResource() interface{} {
 	return model.ScaleHost{}
 }
 
-func (s *ScaleHostDriver) CustomizeSchema(schema *v1client.Schema) *v1client.Schema {
+func (s *ScaleHostDriver) CustomizeSchema(schema *client.Schema) *client.Schema {
 	scaleOptions := []string{"up", "down"}
 	deleteOptions := []string{"mostRecent", "leastRecent"}
 	minValue := int64(1)
@@ -543,12 +544,11 @@ func createHost(host map[string]interface{}, hostCreateURL string, httpClient *h
 }
 
 func deleteHost(hostID string, apiClient *client.RancherClient) (int, error) {
-	_, err := apiClient.ExternalHostEvent.Create(&client.ExternalHostEvent{
-		EventType:  "host.evacuate",
-		HostId:     hostID,
-		DeleteHost: true,
-	})
-
+	host, err := apiClient.Host.ById(hostID)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("Can't get host from hostID %s", hostID)
+	}
+	err = apiClient.Host.Delete(host)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("Error %v in deleting host %s", err, hostID)
 	}

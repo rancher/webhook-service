@@ -6,15 +6,15 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
-	"github.com/rancher/go-rancher/api"
-	v1client "github.com/rancher/go-rancher/client"
+	"github.com/rancher/go-rancher/v3"
+	"github.com/rancher/go-rancher/v3/api"
 	"github.com/rancher/webhook-service/drivers"
 	"github.com/rancher/webhook-service/model"
 )
 
-var schemas *v1client.Schemas
+var schemas *client.Schemas
 
-func HandleError(s *v1client.Schemas, t func(http.ResponseWriter, *http.Request) (int, error)) http.Handler {
+func HandleError(s *client.Schemas, t func(http.ResponseWriter, *http.Request) (int, error)) http.Handler {
 	return api.ApiHandler(s, http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		if code, err := t(rw, req); err != nil {
 			apiContext := api.GetApiContext(req)
@@ -22,7 +22,7 @@ func HandleError(s *v1client.Schemas, t func(http.ResponseWriter, *http.Request)
 			rw.Header().Add("Content-Type", "application/json")
 			rw.WriteHeader(code)
 			writeErr := apiContext.WriteResource(&model.ServerAPIError{
-				Resource: v1client.Resource{
+				Resource: client.Resource{
 					Type: "error",
 				},
 				Code:    code,
@@ -78,8 +78,8 @@ func NewRouter(r *RouteHandler) *mux.Router {
 	return router
 }
 
-func driverSchemas() *v1client.Schemas {
-	schemas := &v1client.Schemas{}
+func driverSchemas() *client.Schemas {
+	schemas := &client.Schemas{}
 	webhook := schemas.AddType("receiver", model.Webhook{})
 	webhook.CollectionMethods = []string{"GET", "POST"}
 	webhook.ResourceMethods = []string{"GET", "DELETE"}
@@ -118,8 +118,8 @@ func driverSchemas() *v1client.Schemas {
 	f.Options = driverOptions
 	webhook.ResourceFields["driver"] = f
 
-	schemas.AddType("apiVersion", v1client.Resource{})
-	schemas.AddType("schema", v1client.Schema{})
+	schemas.AddType("apiVersion", client.Resource{})
+	schemas.AddType("schema", client.Schema{})
 	schemas.AddType("error", model.ServerAPIError{})
 
 	return schemas

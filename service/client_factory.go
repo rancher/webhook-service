@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/rancher/go-rancher/v2"
+	"github.com/rancher/go-rancher/v3"
 	"github.com/rancher/webhook-service/config"
 )
 

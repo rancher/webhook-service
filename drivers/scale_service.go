@@ -6,8 +6,7 @@ import (
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
-	v1client "github.com/rancher/go-rancher/client"
-	"github.com/rancher/go-rancher/v2"
+	"github.com/rancher/go-rancher/v3"
 	"github.com/rancher/webhook-service/model"
 )
 
@@ -57,7 +56,7 @@ func (s *ScaleServiceDriver) ValidatePayload(conf interface{}, apiClient *client
 		return http.StatusBadRequest, fmt.Errorf("Invalid service %v", config.ServiceID)
 	}
 
-	if service.Kind != "service" && service.Kind != "loadBalancerService" {
+	if service.Kind != "scalingGroup" && service.Kind != "loadBalancerService" {
 		return http.StatusBadRequest, fmt.Errorf("Can only create webhooks for Services. The supplied service is of type %v", service.Kind)
 	}
 
@@ -143,7 +142,7 @@ func (s *ScaleServiceDriver) GetDriverConfigResource() interface{} {
 	return model.ScaleService{}
 }
 
-func (s *ScaleServiceDriver) CustomizeSchema(schema *v1client.Schema) *v1client.Schema {
+func (s *ScaleServiceDriver) CustomizeSchema(schema *client.Schema) *client.Schema {
 	options := []string{"up", "down"}
 	minValue := int64(1)
 

@@ -11,8 +11,8 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/dchest/uniuri"
 	"github.com/pkg/errors"
-	"github.com/rancher/go-rancher/api"
-	"github.com/rancher/go-rancher/v2"
+	"github.com/rancher/go-rancher/v3/api"
+	"github.com/rancher/go-rancher/v3"
 	"github.com/rancher/webhook-service/drivers"
 	"github.com/rancher/webhook-service/model"
 )

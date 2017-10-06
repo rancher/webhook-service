@@ -1,8 +1,7 @@
 package drivers
 
 import (
-	v1client "github.com/rancher/go-rancher/client"
-	"github.com/rancher/go-rancher/v2"
+	"github.com/rancher/go-rancher/v3"
 	"github.com/rancher/webhook-service/model"
 )
 
@@ -15,7 +14,7 @@ type WebhookDriver interface {
 	Execute(config interface{}, apiClient *client.RancherClient, requestBody interface{}) (int, error)
 	GetDriverConfigResource() interface{}
 	ConvertToConfigAndSetOnWebhook(conf interface{}, webhook *model.Webhook) error
-	CustomizeSchema(schema *v1client.Schema) *v1client.Schema
+	CustomizeSchema(schema *client.Schema) *client.Schema
 }
 
 //RegisterDrivers creates object of type driver for every request
