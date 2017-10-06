@@ -7,9 +7,8 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
-	"github.com/rancher/go-rancher/api"
-	v1client "github.com/rancher/go-rancher/client"
-	"github.com/rancher/go-rancher/v2"
+	"github.com/rancher/go-rancher/v3/api"
+	"github.com/rancher/go-rancher/v3"
 	"github.com/rancher/webhook-service/drivers"
 	"github.com/rancher/webhook-service/model"
 )
@@ -55,7 +54,7 @@ func (rh *RouteHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) (in
 
 	collectionURL := apiContext.UrlBuilder.Current() + "?projectId=" + projectID
 	apiContext.Write(&model.WebhookCollection{
-		Collection: v1client.Collection{
+		Collection: client.Collection{
 			ResourceType: "receiver",
 			Links:        map[string]string{"self": collectionURL}},
 		Data: response})
@@ -154,7 +153,7 @@ func newWebhook(context *api.ApiContext, url string, id string, driverName strin
 	}
 
 	webhook := &model.Webhook{
-		Resource: v1client.Resource{
+		Resource: client.Resource{
 			Id:    id,
 			Type:  "receiver",
 			Links: map[string]string{"self": selfLink},

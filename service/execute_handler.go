@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	jwt "github.com/dgrijalva/jwt-go"
-	"github.com/rancher/go-rancher/v2"
+	"github.com/rancher/go-rancher/v3"
 	"github.com/rancher/webhook-service/drivers"
 )
 

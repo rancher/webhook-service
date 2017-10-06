@@ -10,8 +10,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
-	v1client "github.com/rancher/go-rancher/client"
-	"github.com/rancher/go-rancher/v2"
+	"github.com/rancher/go-rancher/v3"
 	"github.com/rancher/webhook-service/model"
 )
 
@@ -51,6 +50,7 @@ func (s *ServiceUpgradeDriver) ValidatePayload(conf interface{}, apiClient *clie
 }
 
 func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.RancherClient, requestPayload interface{}) (int, error) {
+	fmt.Println("executed")
 	requestBody := make(map[string]interface{})
 	config := &model.ServiceUpgrade{}
 	err := mapstructure.Decode(conf, config)
@@ -141,7 +141,7 @@ func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgra
 				if !strings.EqualFold(k, key) {
 					continue
 				}
-				if !strings.EqualFold(v.(string), value) {
+				if !strings.EqualFold(v, value) {
 					continue
 				}
 
@@ -155,7 +155,7 @@ func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgra
 		newLaunchConfig := service.LaunchConfig
 		for k, v := range primaryLabels {
 			if strings.EqualFold(k, key) {
-				if strings.EqualFold(v.(string), value) {
+				if strings.EqualFold(v, value) {
 					primaryPresent = true
 					newLaunchConfig.ImageUuid = "docker:" + pushedImage
 					newLaunchConfig.Labels["io.rancher.container.pull_image"] = "always"
@@ -199,12 +199,6 @@ func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgra
 			if upgradedService.State != "upgraded" {
 				return
 			}
-
-			_, err = apiClient.Service.ActionFinishupgrade(upgradedService)
-			if err != nil {
-				log.Errorf("Error %v in finishUpgrade of service %s", err, upgradedService.Id)
-				return
-			}
 		}(service, apiClient, newLaunchConfig, secConfigs, primaryPresent, secondaryPresent)
 	}
 }
@@ -231,7 +225,7 @@ func (s *ServiceUpgradeDriver) GetDriverConfigResource() interface{} {
 	return model.ServiceUpgrade{}
 }
 
-func (s *ServiceUpgradeDriver) CustomizeSchema(schema *v1client.Schema) *v1client.Schema {
+func (s *ServiceUpgradeDriver) CustomizeSchema(schema *client.Schema) *client.Schema {
 	options := []string{"dockerhub", "alicloud"}
 	minValue := int64(1)
 

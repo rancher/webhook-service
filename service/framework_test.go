@@ -11,7 +11,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
-	"github.com/rancher/go-rancher/v2"
+	"github.com/rancher/go-rancher/v3"
 	"github.com/rancher/rancher-auth-service/util"
 	"github.com/rancher/webhook-service/drivers"
 	"github.com/rancher/webhook-service/model"

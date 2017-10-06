@@ -3,8 +3,8 @@ package service
 import (
 	"net/http"
 
-	"github.com/rancher/go-rancher/api"
-	v1client "github.com/rancher/go-rancher/client"
+	"github.com/rancher/go-rancher/v3/api"
+	"github.com/rancher/go-rancher/v3"
 )
 
 func vHandler(rw http.ResponseWriter, r *http.Request) (int, error) {
@@ -15,7 +15,7 @@ func vHandler(rw http.ResponseWriter, r *http.Request) (int, error) {
 
 	apiContext := api.GetApiContext(r)
 
-	versionResource := v1client.Resource{
+	versionResource := client.Resource{
 		Type:  "apiVersion",
 		Links: map[string]string{},
 	}
@@ -33,7 +33,7 @@ func vHandler(rw http.ResponseWriter, r *http.Request) (int, error) {
 	return 200, nil
 }
 
-func VersionHandler(schemas *v1client.Schemas) http.Handler {
+func VersionHandler(schemas *client.Schemas) http.Handler {
 	return api.ApiHandler(schemas, HandleError(schemas, vHandler))
 }
 

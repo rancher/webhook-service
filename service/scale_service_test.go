@@ -12,8 +12,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/mitchellh/mapstructure"
-	v1client "github.com/rancher/go-rancher/client"
-	"github.com/rancher/go-rancher/v2"
+	"github.com/rancher/go-rancher/v3"
 	"github.com/rancher/webhook-service/drivers"
 	"github.com/rancher/webhook-service/model"
 )
@@ -328,7 +327,7 @@ func (s *MockServiceDriver) GetDriverConfigResource() interface{} {
 	return model.ScaleService{}
 }
 
-func (s *MockServiceDriver) CustomizeSchema(schema *v1client.Schema) *v1client.Schema {
+func (s *MockServiceDriver) CustomizeSchema(schema *client.Schema) *client.Schema {
 	return schema
 }
 
