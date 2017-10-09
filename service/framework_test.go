@@ -67,6 +67,14 @@ func init() {
 	}
 	drivers.Drivers["scaleHost"] = &MockHostDriver{expectedConfigLabel: expectedHostConfigLabel, expectedConfigHostTemplate: expectedHostConfigHostTemplate}
 
+	expectedForwardPostTemplate := model.ForwardPost{
+		ProjectID:   "1a5",
+		ServiceName: "pipeline-server",
+		Port:        "60080",
+		Path:        "/v1",
+	}
+	drivers.Drivers["forwardPost"] = &MockForwardPostDriver{expectedConfig: expectedForwardPostTemplate}
+
 	privateKey := util.ParsePrivateKey("../testutils/private.pem")
 	publicKey := util.ParsePublicKey("../testutils/public.pem")
 	r = &RouteHandler{
