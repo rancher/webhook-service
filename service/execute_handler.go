@@ -1,9 +1,7 @@
 package service
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 
 	jwt "github.com/dgrijalva/jwt-go"
@@ -12,31 +10,14 @@ import (
 )
 
 func (rh *RouteHandler) Execute(w http.ResponseWriter, r *http.Request) (int, error) {
-	var requestBody interface{}
-
-	if r.Body != nil {
-		bytes, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			return 500, fmt.Errorf("Error reading request body in Execute handler: %v", err)
-		}
-
-		if len(bytes) > 0 {
-			err = json.Unmarshal(bytes, &requestBody)
-			if err != nil {
-				return 500, fmt.Errorf("Error unmarshalling request body in Execute handler: %v", err)
-			}
-		}
-	}
-
 	jwtSigned := r.FormValue("token")
 	if jwtSigned != "" {
-		code, err := rh.ExecuteWithJwt(jwtSigned, requestBody)
+		code, err := rh.ExecuteWithJwt(jwtSigned, r)
 		if err != nil {
 			return code, err
 		}
 		return 200, nil
 	}
-
 	uuid := r.FormValue("key")
 	if uuid == "" {
 		return 400, fmt.Errorf("Invalid execute url, should have 'token' or 'key'")
@@ -47,7 +28,7 @@ func (rh *RouteHandler) Execute(w http.ResponseWriter, r *http.Request) (int, er
 		return 400, fmt.Errorf("Invalid execute url, url must contain projectId")
 	}
 
-	code, err := rh.ExecuteWithKey(uuid, projectID, requestBody)
+	code, err := rh.ExecuteWithKey(uuid, projectID, r)
 	if err != nil {
 		return code, err
 	}
@@ -55,7 +36,7 @@ func (rh *RouteHandler) Execute(w http.ResponseWriter, r *http.Request) (int, er
 	return 200, nil
 }
 
-func (rh *RouteHandler) ExecuteWithJwt(jwtSigned string, requestBody interface{}) (int, error) {
+func (rh *RouteHandler) ExecuteWithJwt(jwtSigned string, request *http.Request) (int, error) {
 	token, err := jwt.Parse(jwtSigned, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
@@ -98,7 +79,7 @@ func (rh *RouteHandler) ExecuteWithJwt(jwtSigned string, requestBody interface{}
 			return code, err
 		}
 
-		responseCode, err := driver.Execute(claims["config"], apiClient, requestBody)
+		responseCode, err := driver.Execute(claims["config"], apiClient, request)
 		if err != nil {
 			return responseCode, fmt.Errorf("Error %v in executing driver for %s", err, driverID)
 		}
@@ -106,7 +87,7 @@ func (rh *RouteHandler) ExecuteWithJwt(jwtSigned string, requestBody interface{}
 	return 200, nil
 }
 
-func (rh *RouteHandler) ExecuteWithKey(uuid string, projectID string, requestBody interface{}) (int, error) {
+func (rh *RouteHandler) ExecuteWithKey(uuid string, projectID string, request *http.Request) (int, error) {
 	apiClient, err := rh.ClientFactory.GetClient(projectID)
 	if err != nil {
 		return 500, err
@@ -141,7 +122,7 @@ func (rh *RouteHandler) ExecuteWithKey(uuid string, projectID string, requestBod
 		return 400, fmt.Errorf("Driver config not found")
 	}
 
-	responseCode, err := driver.Execute(driverConfig, apiClient, requestBody)
+	responseCode, err := driver.Execute(driverConfig, apiClient, request)
 	if err != nil {
 		return responseCode, fmt.Errorf("Error %v in executing driver for %s", err, driverID)
 	}
