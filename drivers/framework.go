@@ -1,6 +1,8 @@
 package drivers
 
 import (
+	"net/http"
+
 	v1client "github.com/rancher/go-rancher/client"
 	"github.com/rancher/go-rancher/v2"
 	"github.com/rancher/webhook-service/model"
@@ -12,7 +14,7 @@ var Drivers map[string]WebhookDriver
 //WebhookDriver interface for all drivers
 type WebhookDriver interface {
 	ValidatePayload(config interface{}, apiClient *client.RancherClient) (int, error)
-	Execute(config interface{}, apiClient *client.RancherClient, requestBody interface{}) (int, error)
+	Execute(config interface{}, apiClient *client.RancherClient, request *http.Request) (int, error)
 	GetDriverConfigResource() interface{}
 	ConvertToConfigAndSetOnWebhook(conf interface{}, webhook *model.Webhook) error
 	CustomizeSchema(schema *v1client.Schema) *v1client.Schema
