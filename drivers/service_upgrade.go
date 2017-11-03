@@ -114,11 +114,8 @@ func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.Ranch
 }
 
 func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgrade, pushedImage string) {
-	var key, value string
-	var secondaryPresent, primaryPresent bool
 	serviceSelector := make(map[string]string)
-
-	for key, value = range config.ServiceSelector {
+	for key, value := range config.ServiceSelector {
 		serviceSelector[key] = value
 	}
 	batchSize := config.BatchSize
@@ -129,22 +126,38 @@ func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgra
 		log.Errorf("Error %v in listing services", err)
 		return
 	}
+	upgStrategy := &client.InServiceUpgradeStrategy{
+		BatchSize:      batchSize,
+		IntervalMillis: intervalMillis * 1000,
+		StartFirst:     startFirst,
+	}
+	batchUpgrade(apiClient, services.Data, serviceSelector, upgStrategy, pushedImage)
+	if services.Collection.Pagination.Partial {
+		chunk := services
+		for {
+			chunk, err = chunk.Next()
+			if err != nil {
+				log.Errorf("Error %v in listing service chunk", err)
+				return
+			}
+			if chunk != nil {
+				batchUpgrade(apiClient, chunk.Data, serviceSelector, upgStrategy, pushedImage)
+			} else {
+				break
+			}
+		}
+	}
+}
 
-	for _, service := range services.Data {
-		secondaryPresent = false
-		primaryPresent = false
+func batchUpgrade(apiClient *client.RancherClient, collection []client.Service, serviceSelector map[string]string, upgStrategy *client.InServiceUpgradeStrategy, pushedImage string) {
+	for _, service := range collection {
+		secondaryPresent := false
+		primaryPresent := false
 		primaryLabels := service.LaunchConfig.Labels
 		secConfigs := []client.SecondaryLaunchConfig{}
 		for _, secLaunchConfig := range service.SecondaryLaunchConfigs {
 			labels := secLaunchConfig.Labels
-			for k, v := range labels {
-				if !strings.EqualFold(k, key) {
-					continue
-				}
-				if !strings.EqualFold(v.(string), value) {
-					continue
-				}
-
+			if isMatchedService(serviceSelector, labels) {
 				secLaunchConfig.ImageUuid = "docker:" + pushedImage
 				secLaunchConfig.Labels["io.rancher.container.pull_image"] = "always"
 				secConfigs = append(secConfigs, secLaunchConfig)
@@ -153,14 +166,10 @@ func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgra
 		}
 
 		newLaunchConfig := service.LaunchConfig
-		for k, v := range primaryLabels {
-			if strings.EqualFold(k, key) {
-				if strings.EqualFold(v.(string), value) {
-					primaryPresent = true
-					newLaunchConfig.ImageUuid = "docker:" + pushedImage
-					newLaunchConfig.Labels["io.rancher.container.pull_image"] = "always"
-				}
-			}
+		if isMatchedService(serviceSelector, primaryLabels) {
+			primaryPresent = true
+			newLaunchConfig.ImageUuid = "docker:" + pushedImage
+			newLaunchConfig.Labels["io.rancher.container.pull_image"] = "always"
 		}
 
 		if !primaryPresent && !secondaryPresent {
@@ -169,11 +178,6 @@ func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgra
 
 		go func(service client.Service, apiClient *client.RancherClient, newLaunchConfig *client.LaunchConfig,
 			secConfigs []client.SecondaryLaunchConfig, primaryPresent bool, secondaryPresent bool) {
-			upgStrategy := &client.InServiceUpgradeStrategy{
-				BatchSize:      batchSize,
-				IntervalMillis: intervalMillis * 1000,
-				StartFirst:     startFirst,
-			}
 			if primaryPresent && secondaryPresent {
 				upgStrategy.LaunchConfig = newLaunchConfig
 				upgStrategy.SecondaryLaunchConfigs = secConfigs
@@ -207,6 +211,22 @@ func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgra
 			}
 		}(service, apiClient, newLaunchConfig, secConfigs, primaryPresent, secondaryPresent)
 	}
+}
+
+func isMatchedService(serviceSelector map[string]string, serviceLabels map[string]interface{}) bool {
+	for key, value := range serviceSelector {
+		found := false
+		for k, v := range serviceLabels {
+			if strings.EqualFold(k, key) && (value == "" || strings.EqualFold(v.(string), value)) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *ServiceUpgradeDriver) ConvertToConfigAndSetOnWebhook(conf interface{}, webhook *model.Webhook) error {
