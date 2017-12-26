@@ -103,7 +103,11 @@ func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.Ranch
 		alicloudFullName, fullnameOk := repository.(map[string]interface{})["repo_full_name"].(string)
 		alicloudRegion, regionOk := repository.(map[string]interface{})["region"].(string)
 		if fullnameOk && regionOk {
-			imageName := "registry." + alicloudRegion + ".aliyuncs.com/" + alicloudFullName
+			addressType := config.AddressType
+			if addressType == "" {
+				addressType = "registry"
+			}
+			imageName := addressType + "." + alicloudRegion + ".aliyuncs.com/" + alicloudFullName
 			pushedImage = imageName + ":" + pushedTag
 		} else {
 			return http.StatusBadRequest, fmt.Errorf("Alicloud Docker Hub response provided without image name")
@@ -274,6 +278,13 @@ func (s *ServiceUpgradeDriver) CustomizeSchema(schema *v1client.Schema) *v1clien
 	payloadFormat.Options = options
 	payloadFormat.Default = options[0]
 	schema.ResourceFields["payloadFormat"] = payloadFormat
+
+	addressTypes := []string{"registry", "registry-internal", "registry-vpc"}
+	addressType := schema.ResourceFields["addressType"]
+	addressType.Type = "enum"
+	addressType.Options = addressTypes
+	addressType.Default = addressTypes[0]
+	schema.ResourceFields["addressType"] = addressType
 
 	batchSize := schema.ResourceFields["batchSize"]
 	batchSize.Default = 1
