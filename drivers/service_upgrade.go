@@ -82,24 +82,22 @@ func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.Ranch
 		return http.StatusBadRequest, fmt.Errorf("Body should be of type map[string]interface{}")
 	}
 
-	pushedData, ok := requestBody["push_data"]
-	if !ok {
-		return http.StatusBadRequest, fmt.Errorf("Incomplete webhook response provided")
-	}
-
-	pushedTag, ok := pushedData.(map[string]interface{})["tag"].(string)
-	if !ok {
-		return http.StatusBadRequest, fmt.Errorf("Webhook response contains no tag")
-	}
-
-	repository, ok := requestBody["repository"]
-	if !ok {
-		return http.StatusBadRequest, fmt.Errorf("Response provided without repository information")
-	}
-
 	pushedImage := ""
+	pushedTag := ""
 	switch config.PayloadFormat {
 	case "alicloud":
+		pushedData, ok := requestBody["push_data"]
+		if !ok {
+			return http.StatusBadRequest, fmt.Errorf("Incomplete Alicloud Docker Hub webhook response provided")
+		}
+		pushedTag, ok = pushedData.(map[string]interface{})["tag"].(string)
+		if !ok {
+			return http.StatusBadRequest, fmt.Errorf("Alicloud Docker Hub webhook response contains no tag")
+		}
+		repository, ok := requestBody["repository"]
+		if !ok {
+			return http.StatusBadRequest, fmt.Errorf("Alicloud Docker Hub response provided without repository information")
+		}
 		alicloudFullName, fullnameOk := repository.(map[string]interface{})["repo_full_name"].(string)
 		alicloudRegion, regionOk := repository.(map[string]interface{})["region"].(string)
 		if fullnameOk && regionOk {
@@ -112,7 +110,40 @@ func (s *ServiceUpgradeDriver) Execute(conf interface{}, apiClient *client.Ranch
 		} else {
 			return http.StatusBadRequest, fmt.Errorf("Alicloud Docker Hub response provided without image name")
 		}
+	case "azure":
+		pushedData, ok := requestBody["target"]
+		if !ok {
+			return http.StatusBadRequest, fmt.Errorf("Incomplete Azure Container Reigstry webhook response provided")
+		}
+		pushedTag, ok = pushedData.(map[string]interface{})["tag"].(string)
+		if !ok {
+			return http.StatusBadRequest, fmt.Errorf("Azure Container Reigstry webhook response contains no tag")
+		}
+		repository, ok := requestBody["request"]
+		if !ok {
+			return http.StatusBadRequest, fmt.Errorf("Azure Container Reigstry response provided without request information")
+		}
+		azureHost, hostOk := repository.(map[string]interface{})["host"].(string)
+		azureRepo, repoOk := pushedData.(map[string]interface{})["repository"].(string)
+		if hostOk && repoOk {
+			imageName := azureHost + "/" + azureRepo
+			pushedImage = imageName + ":" + pushedTag
+		} else {
+			return http.StatusBadRequest, fmt.Errorf("Azure Container Reigstry response provided without image name")
+		}
 	default:
+		pushedData, ok := requestBody["push_data"]
+		if !ok {
+			return http.StatusBadRequest, fmt.Errorf("Incomplete webhook response provided")
+		}
+		pushedTag, ok = pushedData.(map[string]interface{})["tag"].(string)
+		if !ok {
+			return http.StatusBadRequest, fmt.Errorf("Webhook response contains no tag")
+		}
+		repository, ok := requestBody["repository"]
+		if !ok {
+			return http.StatusBadRequest, fmt.Errorf("Response provided without repository information")
+		}
 		imageName, ok := repository.(map[string]interface{})["repo_name"].(string)
 		if !ok {
 			return http.StatusBadRequest, fmt.Errorf("Response provided without image name")
@@ -270,7 +301,7 @@ func (s *ServiceUpgradeDriver) GetDriverConfigResource() interface{} {
 }
 
 func (s *ServiceUpgradeDriver) CustomizeSchema(schema *v1client.Schema) *v1client.Schema {
-	options := []string{"dockerhub", "alicloud"}
+	options := []string{"dockerhub", "alicloud", "azure"}
 	minValue := int64(1)
 
 	payloadFormat := schema.ResourceFields["payloadFormat"]
