@@ -15,6 +15,7 @@ type ServiceUpgrade struct {
 	ServiceSelector map[string]string `json:"serviceSelector,omitempty" mapstructure:"serviceSelector"`
 	Tag             string            `json:"tag,omitempty" mapstructure:"tag"`
 	PayloadFormat   string            `json:"payloadFormat,omitempty" mapstructure:"payloadFormat"`
+	AddressType     string            `json:"addressType,omitempty" mapstructure:"addressType"`
 	BatchSize       int64             `json:"batchSize,omitempty" mapstructure:"batchSize"`
 	IntervalMillis  int64             `json:"intervalMillis,omitempty" mapstructure:"intervalMillis"`
 	StartFirst      bool              `json:"startFirst,omitempty" mapstructure:"startFirst"`
