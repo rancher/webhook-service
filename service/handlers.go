@@ -14,8 +14,19 @@ import (
 	"github.com/rancher/webhook-service/model"
 )
 
+const (
+	RoleAPIHeader = "X-API-Roles"
+)
+
+var readonlyRoles = map[string]bool{
+	"readonly":      true,
+	"restricted":    true,
+	"v1-readonly":   true,
+	"v1-restricted": true,
+}
+
 func (rh *RouteHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) (int, error) {
-	logrus.Infof("Listing webhooks")
+	logrus.Info("Listing webhooks")
 	apiContext := api.GetApiContext(r)
 	projectID, errCode, err := getProjectID(r)
 	if err != nil {
@@ -48,6 +59,10 @@ func (rh *RouteHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) (in
 		if err != nil {
 			logrus.Warnf("Skipping webhook %s an error ocurred while producing response: %v", webhook.ID, err)
 			continue
+		}
+		// we will hide the url to prevent readonly and restricted users to access endpoint
+		if readonlyRoles[getRoles(r)] {
+			respWebhook.URL = ""
 		}
 
 		response = append(response, *respWebhook)
@@ -100,12 +115,19 @@ func (rh *RouteHandler) GetWebhook(w http.ResponseWriter, r *http.Request) (int,
 	if err != nil {
 		return 500, errors.Wrap(err, "Unable to create webhook response")
 	}
+	// we will hide the url to prevent readonly and restricted users to access endpoint
+	if readonlyRoles[getRoles(r)] {
+		respWebhook.URL = ""
+	}
 
 	apiContext.WriteResource(respWebhook)
 	return 200, nil
 }
 
 func (rh *RouteHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) (int, error) {
+	if readonlyRoles[getRoles(r)] {
+		return http.StatusMethodNotAllowed, fmt.Errorf("user doesn't have the access to delete webhook")
+	}
 	vars := mux.Vars(r)
 	webhookID := vars["id"]
 
@@ -220,4 +242,8 @@ func (rh *RouteHandler) isUniqueName(webhookName string, projectID string, apiCl
 		return 400, fmt.Errorf("Cannot have duplicate webhook name, webhook %s already exists", webhookName)
 	}
 	return 200, nil
+}
+
+func getRoles(r *http.Request) string {
+	return r.Header.Get(RoleAPIHeader)
 }
