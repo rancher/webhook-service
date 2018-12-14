@@ -167,20 +167,12 @@ func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgra
 	for key, value := range config.ServiceSelector {
 		serviceSelector[key] = value
 	}
-	batchSize := config.BatchSize
-	intervalMillis := config.IntervalMillis
-	startFirst := config.StartFirst
 	services, err := apiClient.Service.List(&client.ListOpts{})
 	if err != nil {
 		log.Errorf("Error %v in listing services", err)
 		return
 	}
-	upgStrategy := &client.InServiceUpgradeStrategy{
-		BatchSize:      batchSize,
-		IntervalMillis: intervalMillis * 1000,
-		StartFirst:     startFirst,
-	}
-	batchUpgrade(apiClient, services.Data, serviceSelector, upgStrategy, pushedImage)
+	batchUpgrade(apiClient, services.Data, serviceSelector, config, pushedImage)
 	if services.Collection.Pagination.Partial {
 		chunk := services
 		for {
@@ -190,7 +182,7 @@ func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgra
 				return
 			}
 			if chunk != nil {
-				batchUpgrade(apiClient, chunk.Data, serviceSelector, upgStrategy, pushedImage)
+				batchUpgrade(apiClient, chunk.Data, serviceSelector, config, pushedImage)
 			} else {
 				break
 			}
@@ -198,7 +190,7 @@ func upgradeServices(apiClient *client.RancherClient, config *model.ServiceUpgra
 	}
 }
 
-func batchUpgrade(apiClient *client.RancherClient, collection []client.Service, serviceSelector map[string]string, upgStrategy *client.InServiceUpgradeStrategy, pushedImage string) {
+func batchUpgrade(apiClient *client.RancherClient, collection []client.Service, serviceSelector map[string]string, config *model.ServiceUpgrade, pushedImage string) {
 	for _, service := range collection {
 		secondaryPresent := false
 		primaryPresent := false
@@ -227,6 +219,11 @@ func batchUpgrade(apiClient *client.RancherClient, collection []client.Service, 
 
 		go func(service client.Service, apiClient *client.RancherClient, newLaunchConfig *client.LaunchConfig,
 			secConfigs []client.SecondaryLaunchConfig, primaryPresent bool, secondaryPresent bool) {
+			upgStrategy := &client.InServiceUpgradeStrategy{
+				BatchSize:      config.BatchSize,
+				IntervalMillis: config.IntervalMillis * 1000,
+				StartFirst:     config.StartFirst,
+			}
 			if primaryPresent && secondaryPresent {
 				upgStrategy.LaunchConfig = newLaunchConfig
 				upgStrategy.SecondaryLaunchConfigs = secConfigs
